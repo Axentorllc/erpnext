@@ -59,5 +59,6 @@ def execute():
 	frappe.db.auto_commit_on_many_writes = 0
 
 def get_creation_time():
-	return frappe.db.sql(''' SELECT create_time FROM
-		INFORMATION_SCHEMA.TABLES where TABLE_NAME = "tabRepost Item Valuation" ''', as_list=1)[0][0]
+        return "2020-01-01 00:00:00"
+	#return frappe.db.sql(''' SELECT create_time FROM
+	#	INFORMATION_SCHEMA.TABLES where TABLE_NAME = "tabRepost Item Valuation" ''', as_list=1)[0][0]
