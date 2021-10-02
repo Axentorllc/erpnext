@@ -387,7 +387,11 @@ erpnext.accounts.SalesInvoiceController = erpnext.selling.SellingController.exte
 	},
 
 	is_pos: function(frm){
+		var tmp_cost_center = this.frm.doc.cost_center
+		this.frm.doc.payments = []
+		this.frm.doc.taxes = []
 		this.set_pos_data();
+		this.frm.doc.cost_center = tmp_cost_center;
 	},
 
 	pos_profile: function() {
@@ -403,6 +407,7 @@ erpnext.accounts.SalesInvoiceController = erpnext.selling.SellingController.exte
 				frappe.msgprint(__("Please specify Company to proceed"));
 			} else {
 				var me = this;
+				me.__axe_tmp_cost_center = this.frm.doc.cost_center;
 				return this.frm.call({
 					doc: me.frm.doc,
 					method: "set_missing_values",
@@ -419,6 +424,7 @@ erpnext.accounts.SalesInvoiceController = erpnext.selling.SellingController.exte
 							frappe.model.set_default_values(me.frm.doc);
 							me.set_dynamic_labels();
 							me.calculate_taxes_and_totals();
+							me.frm.doc.cost_center = me.__axe_tmp_cost_center;
 						}
 					}
 				});
