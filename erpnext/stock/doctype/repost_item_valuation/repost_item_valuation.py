@@ -3,14 +3,22 @@
 # For license information, please see license.txt
 
 from __future__ import unicode_literals
-import frappe, erpnext
-from rq.timeouts import JobTimeoutException
-from frappe.model.document import Document
-from frappe.utils import cint, get_link_to_form, add_to_date, now, today, time_diff_in_hours
-from erpnext.stock.stock_ledger import repost_future_sle
-from erpnext.accounts.utils import update_gl_entries_after, check_if_stock_and_account_balance_synced
-from frappe.utils.user import get_users_with_role
+
+import frappe
 from frappe import _
+from frappe.model.document import Document
+from frappe.utils import cint, get_link_to_form, now, today
+from frappe.utils.user import get_users_with_role
+from rq.timeouts import JobTimeoutException
+
+import erpnext
+from erpnext.accounts.utils import (
+	check_if_stock_and_account_balance_synced,
+	update_gl_entries_after,
+)
+from erpnext.stock.stock_ledger import repost_future_sle
+
+
 class RepostItemValuation(Document):
 	def validate(self):
 		self.set_status()
@@ -80,7 +88,7 @@ def repost(doc):
 
 def repost_sl_entries(doc):
 	if doc.based_on == 'Transaction':
-		repost_future_sle(voucher_type=doc.voucher_type, voucher_no=doc.voucher_no,
+		repost_future_sle(doc=doc, voucher_type=doc.voucher_type, voucher_no=doc.voucher_no,
 			allow_negative_stock=doc.allow_negative_stock, via_landed_cost_voucher=doc.via_landed_cost_voucher)
 	else:
 		repost_future_sle(args=[frappe._dict({
