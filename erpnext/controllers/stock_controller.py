@@ -17,7 +17,7 @@ from erpnext.accounts.general_ledger import (
 from erpnext.accounts.utils import get_fiscal_year
 from erpnext.controllers.accounts_controller import AccountsController
 from erpnext.stock import get_warehouse_account_map
-from erpnext.stock.stock_ledger import get_valuation_rate
+from erpnext.stock.stock_ledger import get_items_to_be_repost
 
 
 class QualityInspectionRequiredError(frappe.ValidationError): pass
@@ -40,7 +40,10 @@ class StockController(AccountsController):
 		if self.docstatus == 2:
 			make_reverse_gl_entries(voucher_type=self.doctype, voucher_no=self.name)
 
-		if cint(erpnext.is_perpetual_inventory_enabled(self.company)):
+		provisional_accounting_for_non_stock_items = \
+			cint(frappe.db.get_value('Company', self.company, 'enable_provisional_accounting_for_non_stock_items'))
+
+		if cint(erpnext.is_perpetual_inventory_enabled(self.company)) or provisional_accounting_for_non_stock_items:
 			warehouse_account = get_warehouse_account_map(self.company)
 
 			if self.docstatus==1:
@@ -77,17 +80,17 @@ class StockController(AccountsController):
 						.format(d.idx, get_link_to_form("Batch", d.get("batch_no"))))
 
 	def clean_serial_nos(self):
+		from erpnext.stock.doctype.serial_no.serial_no import clean_serial_no_string
+
 		for row in self.get("items"):
 			if hasattr(row, "serial_no") and row.serial_no:
-				# replace commas by linefeed
-				row.serial_no = row.serial_no.replace(",", "\n")
+				# remove extra whitespace and store one serial no on each line
+				row.serial_no = clean_serial_no_string(row.serial_no)
 
-				# strip preceeding and succeeding spaces for each SN
-				# (SN could have valid spaces in between e.g. SN - 123 - 2021)
-				serial_no_list = row.serial_no.split("\n")
-				serial_no_list = [sn.strip() for sn in serial_no_list]
-
-				row.serial_no = "\n".join(serial_no_list)
+		for row in self.get('packed_items') or []:
+			if hasattr(row, "serial_no") and row.serial_no:
+				# remove extra whitespace and store one serial no on each line
+				row.serial_no = clean_serial_no_string(row.serial_no)
 
 	def get_gl_entries(self, warehouse_account=None, default_expense_account=None,
 			default_cost_center=None):
@@ -111,17 +114,6 @@ class StockController(AccountsController):
 
 						self.check_expense_account(item_row)
 
-						# If the item does not have the allow zero valuation rate flag set
-						# and ( valuation rate not mentioned in an incoming entry
-						# or incoming entry not found while delivering the item),
-						# try to pick valuation rate from previous sle or Item master and update in SLE
-						# Otherwise, throw an exception
-
-						if not sle.stock_value_difference and self.doctype != "Stock Reconciliation" \
-							and not item_row.get("allow_zero_valuation_rate"):
-
-							sle = self.update_stock_ledger_entries(sle)
-
 						# expense account/ target_warehouse / source_warehouse
 						if item_row.get('target_warehouse'):
 							warehouse = item_row.get('target_warehouse')
@@ -134,7 +126,7 @@ class StockController(AccountsController):
 							"against": expense_account,
 							"cost_center": item_row.cost_center,
 							"project": item_row.project or self.get('project'),
-							"remarks": self.get("remarks") or "Accounting Entry for Stock",
+							"remarks": self.get("remarks") or _("Accounting Entry for Stock"),
 							"debit": flt(sle.stock_value_difference, precision),
 							"is_opening": item_row.get("is_opening") or self.get("is_opening") or "No",
 						}, warehouse_account[sle.warehouse]["account_currency"], item=item_row))
@@ -143,7 +135,7 @@ class StockController(AccountsController):
 							"account": expense_account,
 							"against": warehouse_account[sle.warehouse]["account"],
 							"cost_center": item_row.cost_center,
-							"remarks": self.get("remarks") or "Accounting Entry for Stock",
+							"remarks": self.get("remarks") or _("Accounting Entry for Stock"),
 							"credit": flt(sle.stock_value_difference, precision),
 							"project": item_row.get("project") or self.get("project"),
 							"is_opening": item_row.get("is_opening") or self.get("is_opening") or "No"
@@ -163,26 +155,6 @@ class StockController(AccountsController):
 			frappe.flags.debit_field_precision = frappe.get_precision("GL Entry", "debit_in_account_currency")
 
 		return frappe.flags.debit_field_precision
-
-	def update_stock_ledger_entries(self, sle):
-		sle.valuation_rate = get_valuation_rate(sle.item_code, sle.warehouse,
-			self.doctype, self.name, currency=self.company_currency, company=self.company)
-
-		sle.stock_value = flt(sle.qty_after_transaction) * flt(sle.valuation_rate)
-		sle.stock_value_difference = flt(sle.actual_qty) * flt(sle.valuation_rate)
-
-		if sle.name:
-			frappe.db.sql("""
-				update
-					`tabStock Ledger Entry`
-				set
-					stock_value = %(stock_value)s,
-					valuation_rate = %(valuation_rate)s,
-					stock_value_difference = %(stock_value_difference)s
-				where
-					name = %(name)s""", (sle))
-
-		return sle
 
 	def get_voucher_details(self, default_expense_account, default_cost_center, sle_map):
 		if self.doctype == "Stock Reconciliation":
@@ -287,11 +259,7 @@ class StockController(AccountsController):
 		for d in self.items:
 			if not d.batch_no: continue
 
-			serial_nos = [sr.name for sr in frappe.get_all("Serial No",
-				{'batch_no': d.batch_no, 'status': 'Inactive'})]
-
-			if serial_nos:
-				frappe.db.set_value("Serial No", { 'name': ['in', serial_nos] }, "batch_no", None)
+			frappe.db.set_value("Serial No", {"batch_no": d.batch_no, "status": "Inactive"}, "batch_no", None)
 
 			d.batch_no = None
 			d.db_set("batch_no", None)
@@ -544,7 +512,12 @@ class StockController(AccountsController):
 			"company": self.company
 		})
 		if future_sle_exists(args):
-			create_repost_item_valuation_entry(args)
+			item_based_reposting =  cint(frappe.db.get_single_value("Stock Reposting Settings", "item_based_reposting"))
+			if item_based_reposting:
+				create_item_wise_repost_entries(voucher_type=self.doctype, voucher_no=self.name)
+			else:
+				create_repost_item_valuation_entry(args)
+
 
 @frappe.whitelist()
 def make_quality_inspections(doctype, docname, items):
@@ -676,5 +649,38 @@ def create_repost_item_valuation_entry(args):
 	repost_entry.company = args.company
 	repost_entry.allow_zero_rate = args.allow_zero_rate
 	repost_entry.flags.ignore_links = True
+	repost_entry.flags.ignore_permissions = True
 	repost_entry.save()
 	repost_entry.submit()
+
+
+def create_item_wise_repost_entries(voucher_type, voucher_no, allow_zero_rate=False):
+	"""Using a voucher create repost item valuation records for all item-warehouse pairs."""
+
+	stock_ledger_entries = get_items_to_be_repost(voucher_type, voucher_no)
+
+	distinct_item_warehouses = set()
+	repost_entries = []
+
+	for sle in stock_ledger_entries:
+		item_wh = (sle.item_code, sle.warehouse)
+		if item_wh in distinct_item_warehouses:
+			continue
+		distinct_item_warehouses.add(item_wh)
+
+		repost_entry = frappe.new_doc("Repost Item Valuation")
+		repost_entry.based_on = "Item and Warehouse"
+		repost_entry.voucher_type = voucher_type
+		repost_entry.voucher_no = voucher_no
+
+		repost_entry.item_code = sle.item_code
+		repost_entry.warehouse = sle.warehouse
+		repost_entry.posting_date = sle.posting_date
+		repost_entry.posting_time = sle.posting_time
+		repost_entry.allow_zero_rate = allow_zero_rate
+		repost_entry.flags.ignore_links = True
+		repost_entry.flags.ignore_permissions = True
+		repost_entry.submit()
+		repost_entries.append(repost_entry)
+
+	return repost_entries

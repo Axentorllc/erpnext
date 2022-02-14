@@ -1,10 +1,9 @@
-# -*- coding: utf-8 -*-
 # Copyright (c) 2015, Frappe Technologies Pvt. Ltd. and contributors
 # For license information, please see license.txt
 
-from __future__ import unicode_literals
 
 import json
+from functools import reduce
 
 import frappe
 from frappe import ValidationError, _, scrub, throw
@@ -23,7 +22,7 @@ from erpnext.accounts.doctype.journal_entry.journal_entry import get_default_ban
 from erpnext.accounts.doctype.tax_withholding_category.tax_withholding_category import (
 	get_party_tax_withholding_details,
 )
-from erpnext.accounts.general_ledger import make_gl_entries
+from erpnext.accounts.general_ledger import make_gl_entries, process_gl_map
 from erpnext.accounts.party import get_party_account
 from erpnext.accounts.utils import get_account_currency, get_balance_on, get_outstanding_invoices
 from erpnext.controllers.accounts_controller import (
@@ -342,7 +341,7 @@ class PaymentEntry(AccountsController):
 		for k, v in no_oustanding_refs.items():
 			frappe.msgprint(
 				_("{} - {} now have {} as they had no outstanding amount left before submitting the Payment Entry.")
-					.format(k, frappe.bold(", ".join(d.reference_name for d in v)), frappe.bold("negative outstanding amount"))
+					.format(_(k), frappe.bold(", ".join(d.reference_name for d in v)), frappe.bold(_("negative outstanding amount")))
 				+ "<br><br>" + _("If this is undesirable please cancel the corresponding Payment Entry."),
 				title=_("Warning"), indicator="orange")
 
@@ -436,23 +435,12 @@ class PaymentEntry(AccountsController):
 		if not self.apply_tax_withholding_amount:
 			return
 
-		if not self.advance_tax_account:
-			frappe.throw(_("Advance TDS account is mandatory for advance TDS deduction"))
-
 		net_total = self.paid_amount
-
-		for reference in self.get("references"):
-			net_total_for_tds = 0
-			if reference.reference_doctype == 'Purchase Order':
-				net_total_for_tds += flt(frappe.db.get_value('Purchase Order', reference.reference_name, 'net_total'))
-
-			if net_total_for_tds:
-				net_total = net_total_for_tds
 
 		# Adding args as purchase invoice to get TDS amount
 		args = frappe._dict({
 			'company': self.company,
-			'doctype': 'Purchase Invoice',
+			'doctype': 'Payment Entry',
 			'supplier': self.party,
 			'posting_date': self.posting_date,
 			'net_total': net_total
@@ -464,7 +452,6 @@ class PaymentEntry(AccountsController):
 			return
 
 		tax_withholding_details.update({
-			'add_deduct_tax': 'Add',
 			'cost_center': self.cost_center or erpnext.get_default_cost_center(self.company)
 		})
 
@@ -626,7 +613,7 @@ class PaymentEntry(AccountsController):
 
 			if not total_negative_outstanding:
 				frappe.throw(_("Cannot {0} {1} {2} without any negative outstanding invoice")
-					.format(self.payment_type, ("to" if self.party_type=="Customer" else "from"),
+					.format(_(self.payment_type), (_("to") if self.party_type=="Customer" else _("from")),
 						self.party_type), InvalidPaymentEntry)
 
 			elif paid_amount - additional_charges > total_negative_outstanding:
@@ -692,6 +679,7 @@ class PaymentEntry(AccountsController):
 		self.add_deductions_gl_entries(gl_entries)
 		self.add_tax_gl_entries(gl_entries)
 
+		gl_entries = process_gl_map(gl_entries)
 		make_gl_entries(gl_entries, cancel=cancel, adv_adj=adv_adj)
 
 	def add_party_gl_entries(self, gl_entries):
@@ -755,7 +743,8 @@ class PaymentEntry(AccountsController):
 					"against": self.party if self.payment_type=="Pay" else self.paid_to,
 					"credit_in_account_currency": self.paid_amount,
 					"credit": self.base_paid_amount,
-					"cost_center": self.cost_center
+					"cost_center": self.cost_center,
+					"post_net_value": True
 				}, item=self)
 			)
 		if self.payment_type in ("Receive", "Internal Transfer"):
@@ -785,13 +774,9 @@ class PaymentEntry(AccountsController):
 				rev_dr_or_cr = "credit" if dr_or_cr == "debit" else "debit"
 				against = self.party or self.paid_to
 
-			payment_or_advance_account = self.get_party_account_for_taxes()
+			payment_account = self.get_party_account_for_taxes()
 			tax_amount = d.tax_amount
 			base_tax_amount = d.base_tax_amount
-
-			if self.advance_tax_account:
-				tax_amount = -1 * tax_amount
-				base_tax_amount = -1 * base_tax_amount
 
 			gl_entries.append(
 				self.get_gl_dict({
@@ -801,19 +786,21 @@ class PaymentEntry(AccountsController):
 					dr_or_cr + "_in_account_currency": base_tax_amount
 					if account_currency==self.company_currency
 					else d.tax_amount,
-					"cost_center": d.cost_center
+					"cost_center": d.cost_center,
+					"post_net_value": True,
 				}, account_currency, item=d))
 
-			if not d.included_in_paid_amount or self.advance_tax_account:
+			if not d.included_in_paid_amount:
 				gl_entries.append(
 					self.get_gl_dict({
-						"account": payment_or_advance_account,
+						"account": payment_account,
 						"against": against,
 						rev_dr_or_cr: tax_amount,
 						rev_dr_or_cr + "_in_account_currency": base_tax_amount
 						if account_currency==self.company_currency
 						else d.tax_amount,
 						"cost_center": self.cost_center,
+						"post_net_value": True,
 					}, account_currency, item=d))
 
 	def add_deductions_gl_entries(self, gl_entries):
@@ -835,9 +822,7 @@ class PaymentEntry(AccountsController):
 				)
 
 	def get_party_account_for_taxes(self):
-		if self.advance_tax_account:
-			return self.advance_tax_account
-		elif self.payment_type == 'Receive':
+		if self.payment_type == 'Receive':
 			return self.paid_to
 		elif self.payment_type in ('Pay', 'Internal Transfer'):
 			return self.paid_from
@@ -1109,7 +1094,7 @@ def get_outstanding_reference_documents(args):
 
 	if not data:
 		frappe.msgprint(_("No outstanding invoices found for the {0} {1} which qualify the filters you have specified.")
-			.format(args.get("party_type").lower(), frappe.bold(args.get("party"))))
+			.format(_(args.get("party_type")).lower(), frappe.bold(args.get("party"))))
 
 	return data
 
@@ -1540,6 +1525,10 @@ def get_payment_entry(dt, dn, party_amount=None, bank_account=None, bank_amount=
 	pe.received_amount = received_amount
 	pe.letter_head = doc.get("letter_head")
 
+	if dt in ['Purchase Order', 'Sales Order', 'Sales Invoice', 'Purchase Invoice']:
+		pe.project = (doc.get('project') or
+			reduce(lambda prev,cur: prev or cur, [x.get('project') for x in doc.get('items')], None)) # get first non-empty project from items
+
 	if pe.party_type in ["Customer", "Supplier"]:
 		bank_account = get_party_bank_account(pe.party_type, pe.party)
 		pe.set("bank_account", bank_account)
@@ -1601,13 +1590,6 @@ def get_payment_entry(dt, dn, party_amount=None, bank_account=None, bank_amount=
 				'amount': discount_amount * (-1 if payment_type == "Pay" else 1)
 			})
 			pe.set_difference_amount()
-
-	if doc.doctype == 'Purchase Order' and doc.apply_tds:
-		pe.apply_tax_withholding_amount = 1
-		pe.tax_withholding_category = doc.tax_withholding_category
-
-		if not pe.advance_tax_account:
-			pe.advance_tax_account = frappe.db.get_value('Company', pe.company, 'unrealized_profit_loss_account')
 
 	return pe
 
@@ -1732,7 +1714,10 @@ def set_paid_amount_and_received_amount(dt, party_account_currency, bank, outsta
 
 def apply_early_payment_discount(paid_amount, received_amount, doc):
 	total_discount = 0
-	if doc.doctype in ['Sales Invoice', 'Purchase Invoice'] and doc.payment_schedule:
+	eligible_for_payments = ['Sales Order', 'Sales Invoice', 'Purchase Order', 'Purchase Invoice']
+	has_payment_schedule = hasattr(doc, 'payment_schedule') and doc.payment_schedule
+
+	if doc.doctype in eligible_for_payments and has_payment_schedule:
 		for term in doc.payment_schedule:
 			if not term.discounted_amount and term.discount and getdate(nowdate()) <= term.discount_date:
 				if term.discount_type == 'Percentage':

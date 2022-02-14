@@ -1,7 +1,6 @@
 # Copyright (c) 2015, Frappe Technologies Pvt. Ltd. and Contributors
 # License: GNU General Public License v3. See license.txt
 
-from __future__ import unicode_literals
 
 import json
 
@@ -489,7 +488,7 @@ class TestItem(ERPNextTestCase):
 			item_doc.save()
 
 		# Check values saved correctly
-		barcodes = frappe.get_list(
+		barcodes = frappe.get_all(
 			'Item Barcode',
 			fields=['barcode', 'barcode_type'],
 			filters={'parent': item_code})
@@ -573,6 +572,16 @@ class TestItem(ERPNextTestCase):
 			item.save()
 		except frappe.ValidationError as e:
 			self.fail(f"UoM change not allowed even though no SLE / BIN with positive qty exists: {e}")
+
+	def test_erasure_of_old_conversions(self):
+		item = create_item("_item change uom")
+		item.stock_uom = "Gram"
+		item.append("uoms", frappe._dict(uom="Box", conversion_factor=2))
+		item.save()
+		item.reload()
+		item.stock_uom = "Nos"
+		item.save()
+		self.assertEqual(len(item.uoms), 1)
 
 	def test_validate_stock_item(self):
 		self.assertRaises(frappe.ValidationError, validate_is_stock_item, "_Test Non Stock Item")

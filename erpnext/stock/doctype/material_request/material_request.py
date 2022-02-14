@@ -4,7 +4,6 @@
 # ERPNext - web based ERP (http://erpnext.com)
 # For license information, please see license.txt
 
-from __future__ import unicode_literals
 
 import json
 
@@ -81,6 +80,9 @@ class MaterialRequest(BuyingController):
 		# self.validate_qty_against_so()
 		# NOTE: Since Item BOM and FG quantities are combined, using current data, it cannot be validated
 		# Though the creation of Material Request from a Production Plan can be rethought to fix this
+
+		self.reset_default_field_value("set_warehouse", "items", "warehouse")
+		self.reset_default_field_value("set_from_warehouse", "items", "from_warehouse")
 
 	def set_title(self):
 		'''Set title as comma separated list of items'''

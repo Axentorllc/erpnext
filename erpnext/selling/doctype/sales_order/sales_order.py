@@ -1,7 +1,6 @@
 # Copyright (c) 2015, Frappe Technologies Pvt. Ltd. and Contributors
 # License: GNU General Public License v3. See license.txt
 
-from __future__ import unicode_literals
 
 import json
 
@@ -64,6 +63,8 @@ class SalesOrder(SellingController):
 
 		if not self.billing_status: self.billing_status = 'Not Billed'
 		if not self.delivery_status: self.delivery_status = 'Not Delivered'
+
+		self.reset_default_field_value("set_warehouse", "items", "warehouse")
 
 	def validate_po(self):
 		# validate p.o date v/s delivery date
@@ -610,6 +611,13 @@ def make_delivery_note(source_name, target_doc=None, skip_item_mapping=False):
 	}
 
 	if not skip_item_mapping:
+		def condition(doc):
+			# make_mapped_doc sets js `args` into `frappe.flags.args`
+			if frappe.flags.args and frappe.flags.args.delivery_dates:
+				if cstr(doc.delivery_date) not in frappe.flags.args.delivery_dates:
+					return False
+			return abs(doc.delivered_qty) < abs(doc.qty) and doc.delivered_by_supplier!=1
+
 		mapper["Sales Order Item"] = {
 			"doctype": "Delivery Note Item",
 			"field_map": {
@@ -618,7 +626,7 @@ def make_delivery_note(source_name, target_doc=None, skip_item_mapping=False):
 				"parent": "against_sales_order",
 			},
 			"postprocess": update_item,
-			"condition": lambda doc: abs(doc.delivered_qty) < abs(doc.qty) and doc.delivered_by_supplier!=1
+			"condition": condition
 		}
 
 	target_doc = get_mapped_doc("Sales Order", source_name, mapper, target_doc, set_missing_values)
@@ -972,6 +980,7 @@ def make_purchase_order(source_name, selected_items=None, target_doc=None):
 				"supplier",
 				"pricing_rules"
 			],
+			"condition": lambda doc: doc.parent_item in items_to_map
 		}
 	}, target_doc, set_missing_values)
 
@@ -1024,6 +1033,7 @@ def make_work_orders(items, sales_order, company, project=None):
 			description=i['description']
 		)).insert()
 		work_order.set_work_order_operations()
+		work_order.flags.ignore_mandatory = True
 		work_order.save()
 		out.append(work_order)
 

@@ -1,4 +1,3 @@
-from __future__ import unicode_literals
 
 from frappe import _
 
@@ -274,6 +273,9 @@ doc_events = {
 			"erpnext.regional.india.utils.update_taxable_values"
 		]
 	},
+	"POS Invoice": {
+		"on_submit": ["erpnext.regional.saudi_arabia.utils.create_qr_code"]
+	},
 	"Purchase Invoice": {
 		"validate": [
 			"erpnext.regional.india.utils.validate_reverse_charge_transaction",
@@ -386,7 +388,7 @@ scheduler_events = {
 		"erpnext.healthcare.doctype.patient_appointment.patient_appointment.update_appointment_status",
 		"erpnext.buying.doctype.supplier_quotation.supplier_quotation.set_expired_status",
 		"erpnext.accounts.doctype.process_statement_of_accounts.process_statement_of_accounts.send_auto_email",
-		"erpnext.non_profit.doctype.membership.membership.set_expired_status"
+		"erpnext.non_profit.doctype.membership.membership.set_expired_status",
 		"erpnext.hr.doctype.interview.interview.send_daily_feedback_reminder"
 	],
 	"daily_long": [

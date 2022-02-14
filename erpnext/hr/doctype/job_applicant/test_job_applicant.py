@@ -1,7 +1,5 @@
-# -*- coding: utf-8 -*-
 # Copyright (c) 2015, Frappe Technologies Pvt. Ltd. and Contributors and Contributors
 # See license.txt
-from __future__ import unicode_literals
 
 import unittest
 
@@ -11,7 +9,26 @@ from erpnext.hr.doctype.designation.test_designation import create_designation
 
 
 class TestJobApplicant(unittest.TestCase):
-	pass
+	def test_job_applicant_naming(self):
+		applicant = frappe.get_doc({
+			"doctype": "Job Applicant",
+			"status": "Open",
+			"applicant_name": "_Test Applicant",
+			"email_id": "job_applicant_naming@example.com"
+		}).insert()
+		self.assertEqual(applicant.name, 'job_applicant_naming@example.com')
+
+		applicant = frappe.get_doc({
+			"doctype": "Job Applicant",
+			"status": "Open",
+			"applicant_name": "_Test Applicant",
+			"email_id": "job_applicant_naming@example.com"
+		}).insert()
+		self.assertEqual(applicant.name, 'job_applicant_naming@example.com-1')
+
+	def tearDown(self):
+		frappe.db.rollback()
+
 
 def create_job_applicant(**args):
 	args = frappe._dict(args)

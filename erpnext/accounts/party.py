@@ -1,7 +1,6 @@
 # Copyright (c) 2015, Frappe Technologies Pvt. Ltd. and Contributors
 # License: GNU General Public License v3. See license.txt
 
-from __future__ import unicode_literals
 
 import frappe
 from frappe import _, msgprint, scrub
@@ -60,7 +59,7 @@ def _get_party_details(party=None, account=None, party_type="Customer", company=
 		frappe.throw(_("Not permitted for {0}").format(party), frappe.PermissionError)
 
 	party = frappe.get_doc(party_type, party)
-	currency = party.default_currency if party.get("default_currency") else get_company_currency(company)
+	currency = party.get("default_currency") or currency or get_company_currency(company)
 
 	party_address, shipping_address = set_address_details(party_details, party, party_type, doctype, company, party_address, company_address, shipping_address)
 	set_contact_details(party_details, party, party_type)
@@ -70,10 +69,12 @@ def _get_party_details(party=None, account=None, party_type="Customer", company=
 	party_details["tax_category"] = get_address_tax_category(party.get("tax_category"),
 		party_address, shipping_address if party_type != "Supplier" else party_address)
 
-	if not party_details.get("taxes_and_charges"):
-		party_details["taxes_and_charges"] = set_taxes(party.name, party_type, posting_date, company,
-			customer_group=party_details.customer_group, supplier_group=party_details.supplier_group, tax_category=party_details.tax_category,
-			billing_address=party_address, shipping_address=shipping_address)
+	tax_template = set_taxes(party.name, party_type, posting_date, company,
+		customer_group=party_details.customer_group, supplier_group=party_details.supplier_group, tax_category=party_details.tax_category,
+		billing_address=party_address, shipping_address=shipping_address)
+
+	if tax_template:
+		party_details['taxes_and_charges'] = tax_template
 
 	if cint(fetch_payment_terms_template):
 		party_details["payment_terms_template"] = get_payment_terms_template(party.name, party_type, company)

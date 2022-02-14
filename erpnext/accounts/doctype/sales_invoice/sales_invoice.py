@@ -1,7 +1,6 @@
 # Copyright (c) 2015, Frappe Technologies Pvt. Ltd. and Contributors
 # License: GNU General Public License v3. See license.txt
 
-from __future__ import unicode_literals
 
 import frappe
 from frappe import _, msgprint, throw
@@ -37,7 +36,7 @@ from erpnext.assets.doctype.asset.depreciation import (
 	get_disposal_account_and_cost_center,
 	get_gl_entries_on_asset_disposal,
 	get_gl_entries_on_asset_regain,
-	post_depreciation_entries,
+	make_depreciation_entry,
 )
 from erpnext.controllers.selling_controller import SellingController
 from erpnext.healthcare.utils import manage_invoice_submit_cancel
@@ -46,6 +45,7 @@ from erpnext.setup.doctype.company.company import update_company_current_month_s
 from erpnext.stock.doctype.batch.batch import set_batch_nos
 from erpnext.stock.doctype.delivery_note.delivery_note import update_billed_amount_based_on_so
 from erpnext.stock.doctype.serial_no.serial_no import get_delivery_note_serial_no, get_serial_nos
+from erpnext.stock.utils import calculate_mapped_packed_items_return
 
 form_grid_templates = {
 	"items": "templates/form_grid/item_grid.html"
@@ -157,6 +157,8 @@ class SalesInvoice(SellingController):
 
 		if self.redeem_loyalty_points and self.loyalty_program and self.loyalty_points and not self.is_consolidated:
 			validate_loyalty_points(self, self.loyalty_points)
+
+		self.reset_default_field_value("set_warehouse", "items", "warehouse")
 
 	def validate_fixed_asset(self):
 		for d in self.get("items"):
@@ -744,8 +746,11 @@ class SalesInvoice(SellingController):
 
 	def update_packing_list(self):
 		if cint(self.update_stock) == 1:
-			from erpnext.stock.doctype.packed_item.packed_item import make_packing_list
-			make_packing_list(self)
+			if cint(self.is_return) and self.return_against:
+				calculate_mapped_packed_items_return(self)
+			else:
+				from erpnext.stock.doctype.packed_item.packed_item import make_packing_list
+				make_packing_list(self)
 		else:
 			self.set('packed_items', [])
 
@@ -860,8 +865,6 @@ class SalesInvoice(SellingController):
 		self.make_exchange_gain_loss_gl_entries(gl_entries)
 		self.make_internal_transfer_gl_entries(gl_entries)
 
-		self.allocate_advance_taxes(gl_entries)
-
 		self.make_item_gl_entries(gl_entries)
 		self.make_discount_gl_entries(gl_entries)
 
@@ -880,11 +883,11 @@ class SalesInvoice(SellingController):
 		# Checked both rounding_adjustment and rounded_total
 		# because rounded_total had value even before introcution of posting GLE based on rounded total
 		grand_total = self.rounded_total if (self.rounding_adjustment and self.rounded_total) else self.grand_total
+		base_grand_total = flt(self.base_rounded_total if (self.base_rounding_adjustment and self.base_rounded_total)
+			else self.base_grand_total, self.precision("base_grand_total"))
+
 		if grand_total and not self.is_internal_transfer():
 			# Didnot use base_grand_total to book rounding loss gle
-			grand_total_in_company_currency = flt(grand_total * self.conversion_rate,
-				self.precision("grand_total"))
-
 			gl_entries.append(
 				self.get_gl_dict({
 					"account": self.debit_to,
@@ -892,8 +895,8 @@ class SalesInvoice(SellingController):
 					"party": self.customer,
 					"due_date": self.due_date,
 					"against": self.against_income_account,
-					"debit": grand_total_in_company_currency,
-					"debit_in_account_currency": grand_total_in_company_currency \
+					"debit": base_grand_total,
+					"debit_in_account_currency": base_grand_total \
 						if self.party_account_currency==self.company_currency else grand_total,
 					"against_voucher": self.return_against if cint(self.is_return) and self.return_against else self.name,
 					"against_voucher_type": self.doctype,
@@ -946,6 +949,7 @@ class SalesInvoice(SellingController):
 						asset.db_set("disposal_date", None)
 
 						if asset.calculate_depreciation:
+							self.reverse_depreciation_entry_made_after_sale(asset)
 							self.reset_depreciation_schedule(asset)
 
 					else:
@@ -1009,21 +1013,19 @@ class SalesInvoice(SellingController):
 
 	def depreciate_asset(self, asset):
 		asset.flags.ignore_validate_update_after_submit = True
-		asset.prepare_depreciation_data(self.posting_date)
+		asset.prepare_depreciation_data(date_of_sale=self.posting_date)
 		asset.save()
 
-		post_depreciation_entries(self.posting_date)
+		make_depreciation_entry(asset.name, self.posting_date)
 
 	def reset_depreciation_schedule(self, asset):
 		asset.flags.ignore_validate_update_after_submit = True
 
 		# recreate original depreciation schedule of the asset
-		asset.prepare_depreciation_data()
+		asset.prepare_depreciation_data(date_of_return=self.posting_date)
 
 		self.modify_depreciation_schedule_for_asset_repairs(asset)
 		asset.save()
-
-		self.delete_depreciation_entry_made_after_sale(asset)
 
 	def modify_depreciation_schedule_for_asset_repairs(self, asset):
 		asset_repairs = frappe.get_all(
@@ -1038,7 +1040,7 @@ class SalesInvoice(SellingController):
 				asset_repair.modify_depreciation_schedule()
 				asset.prepare_depreciation_data()
 
-	def delete_depreciation_entry_made_after_sale(self, asset):
+	def reverse_depreciation_entry_made_after_sale(self, asset):
 		from erpnext.accounts.doctype.journal_entry.journal_entry import make_reverse_journal_entry
 
 		posting_date_of_original_invoice = self.get_posting_date_of_sales_invoice()
@@ -1053,10 +1055,20 @@ class SalesInvoice(SellingController):
 				row += 1
 
 			if schedule.schedule_date == posting_date_of_original_invoice:
-				if not self.sale_was_made_on_original_schedule_date(asset, schedule, row, posting_date_of_original_invoice):
+				if not self.sale_was_made_on_original_schedule_date(asset, schedule, row, posting_date_of_original_invoice) \
+					or self.sale_happens_in_the_future(posting_date_of_original_invoice):
+
 					reverse_journal_entry = make_reverse_journal_entry(schedule.journal_entry)
 					reverse_journal_entry.posting_date = nowdate()
+					frappe.flags.is_reverse_depr_entry = True
 					reverse_journal_entry.submit()
+
+					frappe.flags.is_reverse_depr_entry = False
+					asset.flags.ignore_validate_update_after_submit = True
+					schedule.journal_entry = None
+					depreciation_amount = self.get_depreciation_amount_in_je(reverse_journal_entry)
+					asset.finance_books[0].value_after_depreciation += depreciation_amount
+					asset.save()
 
 	def get_posting_date_of_sales_invoice(self):
 		return frappe.db.get_value('Sales Invoice', self.return_against, 'posting_date')
@@ -1071,6 +1083,18 @@ class SalesInvoice(SellingController):
 				if orginal_schedule_date == posting_date_of_original_invoice:
 					return True
 		return False
+
+	def sale_happens_in_the_future(self, posting_date_of_original_invoice):
+		if posting_date_of_original_invoice > getdate():
+			return True
+
+		return False
+
+	def get_depreciation_amount_in_je(self, journal_entry):
+		if journal_entry.accounts[0].debit_in_account_currency:
+			return journal_entry.accounts[0].debit_in_account_currency
+		else:
+			return journal_entry.accounts[0].credit_in_account_currency
 
 	@property
 	def enable_discount_accounting(self):
