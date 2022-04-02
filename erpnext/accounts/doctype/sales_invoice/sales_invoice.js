@@ -437,7 +437,12 @@ erpnext.accounts.SalesInvoiceController = erpnext.selling.SellingController.exte
 							frappe.model.set_default_values(me.frm.doc);
 							me.set_dynamic_labels();
 							me.calculate_taxes_and_totals();
+<<<<<<< HEAD
 							me.frm.doc.cost_center = me.__axe_tmp_cost_center;
+=======
+							me.frm.doc.cost_center = me.__axe_tmp_cost_center
+
+>>>>>>> fixes
 						}
 					}
 				});

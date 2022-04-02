@@ -29,6 +29,10 @@
   {
    "chart": "Item-wise Annual Sales",
    "width": "Full"
+  },
+  {
+   "chart": "Per Sales Person",
+   "width": "Half"
   }
  ],
  "creation": "2020-07-20 20:17:16.688162",
@@ -38,7 +42,7 @@
  "idx": 0,
  "is_default": 0,
  "is_standard": 1,
- "modified": "2020-07-22 15:31:22.299903",
+ "modified": "2021-03-26 23:02:19.955413",
  "modified_by": "Administrator",
  "module": "Selling",
  "name": "Selling",
