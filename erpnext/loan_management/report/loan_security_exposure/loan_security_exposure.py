@@ -1,13 +1,17 @@
 # Copyright (c) 2013, Frappe Technologies Pvt. Ltd. and contributors
 # For license information, please see license.txt
 
-from __future__ import unicode_literals
-import erpnext
+
 from frappe import _
 from frappe.utils import flt
 from six import iteritems
-from erpnext.loan_management.report.applicant_wise_loan_security_exposure.applicant_wise_loan_security_exposure \
-	 import get_loan_security_details, get_applicant_wise_total_loan_security_qty
+
+import erpnext
+from erpnext.loan_management.report.applicant_wise_loan_security_exposure.applicant_wise_loan_security_exposure import (
+	get_applicant_wise_total_loan_security_qty,
+	get_loan_security_details,
+)
+
 
 def execute(filters=None):
 	columns = get_columns(filters)
@@ -35,7 +39,7 @@ def get_columns(filters):
 
 def get_data(filters):
 	data = []
-	loan_security_details = get_loan_security_details(filters)
+	loan_security_details = get_loan_security_details()
 	current_pledges, total_portfolio_value = get_company_wise_loan_security_details(filters, loan_security_details)
 	currency = erpnext.get_company_currency(filters.get('company'))
 
@@ -76,9 +80,6 @@ def get_company_wise_loan_security_details(filters, loan_security_details):
 		if qty:
 			security_wise_map[key[1]]['applicant_count'] += 1
 
-		total_portfolio_value += flt(qty * loan_security_details.get(key[1])['latest_price'])
+		total_portfolio_value += flt(qty * loan_security_details.get(key[1], {}).get('latest_price', 0))
 
 	return security_wise_map, total_portfolio_value
-
-
-

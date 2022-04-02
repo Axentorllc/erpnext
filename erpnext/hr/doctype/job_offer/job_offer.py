@@ -1,13 +1,14 @@
 # Copyright (c) 2015, Frappe Technologies Pvt. Ltd. and Contributors and contributors
 # For license information, please see license.txt
 
-from __future__ import unicode_literals
+
 import frappe
-from frappe.utils import cint
+from frappe import _
 from frappe.model.document import Document
 from frappe.model.mapper import get_mapped_doc
-from frappe import _
+from frappe.utils import cint
 from frappe.utils.data import get_link_to_form
+
 
 class JobOffer(Document):
 	def onload(self):
@@ -16,7 +17,7 @@ class JobOffer(Document):
 
 	def validate(self):
 		self.validate_vacancies()
-		job_offer = frappe.db.exists("Job Offer",{"job_applicant": self.job_applicant})
+		job_offer = frappe.db.exists("Job Offer",{"job_applicant": self.job_applicant, "docstatus": ["!=", 2]})
 		if job_offer and job_offer != self.name:
 			frappe.throw(_("Job Offer: {0} is already for Job Applicant: {1}").format(frappe.bold(job_offer), frappe.bold(self.job_applicant)))
 

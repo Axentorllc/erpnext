@@ -1,7 +1,8 @@
 
-from __future__ import unicode_literals, print_function
+
 import frappe
 from frappe.utils import cint
+
 
 def get_leaderboards():
 	leaderboards = {
@@ -12,6 +13,7 @@ def get_leaderboards():
 				{'fieldname': 'outstanding_amount', 'fieldtype': 'Currency'}
 			],
 			"method": "erpnext.startup.leaderboard.get_all_customers",
+			"icon": "customer"
 		},
 		"Item": {
 			"fields": [
@@ -23,6 +25,7 @@ def get_leaderboards():
 				{'fieldname': 'available_stock_value', 'fieldtype': 'Currency'}
 			],
 			"method": "erpnext.startup.leaderboard.get_all_items",
+			"icon": "stock"
 		},
 		"Supplier": {
 			"fields": [
@@ -31,6 +34,7 @@ def get_leaderboards():
 				{'fieldname': 'outstanding_amount', 'fieldtype': 'Currency'}
 			],
 			"method": "erpnext.startup.leaderboard.get_all_suppliers",
+			"icon": "buying"
 		},
 		"Sales Partner": {
 			"fields": [
@@ -38,12 +42,14 @@ def get_leaderboards():
 				{'fieldname': 'total_commission', 'fieldtype': 'Currency'}
 			],
 			"method": "erpnext.startup.leaderboard.get_all_sales_partner",
+			"icon": "hr"
 		},
 		"Sales Person": {
 			"fields": [
 				{'fieldname': 'total_sales_amount', 'fieldtype': 'Currency'}
 			],
 			"method": "erpnext.startup.leaderboard.get_all_sales_person",
+			"icon": "customer"
 		}
 	}
 

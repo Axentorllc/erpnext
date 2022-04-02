@@ -3,16 +3,16 @@
 
 import json
 
-from PyPDF2 import PdfFileWriter
-
 import frappe
-from erpnext.accounts.utils import get_fiscal_year
 from frappe import _
 from frappe.utils import cstr, nowdate
 from frappe.utils.data import fmt_money
 from frappe.utils.jinja import render_template
 from frappe.utils.pdf import get_pdf
 from frappe.utils.print_format import read_multi_pdf
+from PyPDF2 import PdfFileWriter
+
+from erpnext.accounts.utils import get_fiscal_year
 
 IRS_1099_FORMS_FILE_EXTENSION = ".pdf"
 
@@ -32,6 +32,10 @@ def execute(filters=None):
 
 	data = []
 	columns = get_columns()
+	conditions = ""
+	if filters.supplier_group:
+		conditions += "AND s.supplier_group = %s" %frappe.db.escape(filters.get("supplier_group"))
+
 	data = frappe.db.sql("""
 		SELECT
 			s.supplier_group as "supplier_group",
@@ -46,15 +50,17 @@ def execute(filters=None):
 				AND s.irs_1099 = 1
 				AND gl.fiscal_year = %(fiscal_year)s
 				AND gl.party_type = "Supplier"
+				AND gl.company = %(company)s
+				{conditions}
+
 		GROUP BY
 			gl.party
+
 		ORDER BY
-			gl.party DESC
-	""", {
-		"fiscal_year": filters.fiscal_year,
-		"supplier_group": filters.supplier_group,
-		"company": filters.company
-	}, as_dict=True)
+			gl.party DESC""".format(conditions=conditions), {
+				"fiscal_year": filters.fiscal_year,
+				"company": filters.company
+			}, as_dict=True)
 
 	return columns, data
 
@@ -79,13 +85,13 @@ def get_columns():
 			"fieldname": "tax_id",
 			"label": _("Tax ID"),
 			"fieldtype": "Data",
-			"width": 120
+			"width": 200
 		},
 		{
 			"fieldname": "payments",
 			"label": _("Total Payments"),
 			"fieldtype": "Currency",
-			"width": 120
+			"width": 200
 		}
 	]
 

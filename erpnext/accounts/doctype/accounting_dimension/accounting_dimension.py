@@ -1,17 +1,16 @@
-# -*- coding: utf-8 -*-
 # Copyright (c) 2019, Frappe Technologies Pvt. Ltd. and contributors
 # For license information, please see license.txt
 
-from __future__ import unicode_literals
-import frappe
-from frappe import _
+
 import json
-from frappe.model.document import Document
+
+import frappe
+from frappe import _, scrub
 from frappe.custom.doctype.custom_field.custom_field import create_custom_field
-from frappe import scrub
-from frappe.utils import cstr
-from frappe.utils.background_jobs import enqueue
 from frappe.model import core_doctypes_list
+from frappe.model.document import Document
+from frappe.utils import cstr
+
 
 class AccountingDimension(Document):
 	def before_insert(self):
@@ -19,7 +18,7 @@ class AccountingDimension(Document):
 
 	def validate(self):
 		if self.document_type in core_doctypes_list + ('Accounting Dimension', 'Project',
-				'Cost Center', 'Accounting Dimension Detail', 'Company') :
+				'Cost Center', 'Accounting Dimension Detail', 'Company', 'Account') :
 
 			msg = _("Not allowed to create accounting dimension for {0}").format(self.document_type)
 			frappe.throw(msg)
@@ -27,7 +26,17 @@ class AccountingDimension(Document):
 		exists = frappe.db.get_value("Accounting Dimension", {'document_type': self.document_type}, ['name'])
 
 		if exists and self.is_new():
-			frappe.throw("Document Type already used as a dimension")
+			frappe.throw(_("Document Type already used as a dimension"))
+
+		if not self.is_new():
+			self.validate_document_type_change()
+
+	def validate_document_type_change(self):
+		doctype_before_save = frappe.db.get_value("Accounting Dimension", self.name, "document_type")
+		if doctype_before_save != self.document_type:
+			message = _("Cannot change Reference Document Type.")
+			message += _("Please create a new Accounting Dimension if required.")
+			frappe.throw(message)
 
 	def after_insert(self):
 		if frappe.flags.in_test:
@@ -37,9 +46,9 @@ class AccountingDimension(Document):
 
 	def on_trash(self):
 		if frappe.flags.in_test:
-			delete_accounting_dimension(doc=self, queue='long')
+			delete_accounting_dimension(doc=self)
 		else:
-			frappe.enqueue(delete_accounting_dimension, doc=self)
+			frappe.enqueue(delete_accounting_dimension, doc=self, queue='long')
 
 	def set_fieldname_and_label(self):
 		if not self.label:
@@ -51,8 +60,10 @@ class AccountingDimension(Document):
 	def on_update(self):
 		frappe.flags.accounting_dimensions = None
 
-def make_dimension_in_accounting_doctypes(doc):
-	doclist = get_doctypes_with_dimensions()
+def make_dimension_in_accounting_doctypes(doc, doclist=None):
+	if not doclist:
+		doclist = get_doctypes_with_dimensions()
+
 	doc_count = len(get_accounting_dimensions())
 	count = 0
 
@@ -72,13 +83,13 @@ def make_dimension_in_accounting_doctypes(doc):
 			"owner": "Administrator"
 		}
 
-		if doctype == "Budget":
-			add_dimension_to_budget_doctype(df, doc)
-		else:
-			meta = frappe.get_meta(doctype, cached=False)
-			fieldnames = [d.fieldname for d in meta.get("fields")]
+		meta = frappe.get_meta(doctype, cached=False)
+		fieldnames = [d.fieldname for d in meta.get("fields")]
 
-			if df['fieldname'] not in fieldnames:
+		if df['fieldname'] not in fieldnames:
+			if doctype == "Budget":
+				add_dimension_to_budget_doctype(df.copy(), doc)
+			else:
 				create_custom_field(doctype, df)
 
 		count += 1
@@ -168,15 +179,7 @@ def toggle_disabling(doc):
 		frappe.clear_cache(doctype=doctype)
 
 def get_doctypes_with_dimensions():
-	doclist = ["GL Entry", "Sales Invoice", "POS Invoice", "Purchase Invoice", "Payment Entry", "Asset",
-		"Expense Claim", "Expense Claim Detail", "Expense Taxes and Charges", "Stock Entry", "Budget", "Payroll Entry", "Delivery Note",
-		"Sales Invoice Item", "POS Invoice Item", "Purchase Invoice Item", "Purchase Order Item", "Journal Entry Account", "Material Request Item", "Delivery Note Item",
-		"Purchase Receipt Item", "Stock Entry Detail", "Payment Entry Deduction", "Sales Taxes and Charges", "Purchase Taxes and Charges", "Shipping Rule",
-		"Landed Cost Item", "Asset Value Adjustment", "Loyalty Program", "Fee Schedule", "Fee Structure", "Stock Reconciliation",
-		"Travel Request", "Fees", "POS Profile", "Opening Invoice Creation Tool", "Opening Invoice Creation Tool Item", "Subscription",
-		"Subscription Plan"]
-
-	return doclist
+	return frappe.get_hooks("accounting_dimension_doctypes")
 
 def get_accounting_dimensions(as_list=True):
 	if frappe.flags.accounting_dimensions is None:

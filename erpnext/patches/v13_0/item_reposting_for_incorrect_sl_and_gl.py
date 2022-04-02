@@ -1,14 +1,24 @@
 import frappe
-from frappe import _
-from frappe.utils import getdate, get_time, today
-from erpnext.stock.stock_ledger import update_entries_after
+from frappe.utils import get_time, getdate, today
+
 from erpnext.accounts.utils import update_gl_entries_after
+from erpnext.stock.stock_ledger import update_entries_after
+
 
 def execute():
-	for doctype in ('repost_item_valuation', 'stock_entry_detail', 'purchase_receipt_item',
-			'purchase_invoice_item', 'delivery_note_item', 'sales_invoice_item', 'packed_item'):
-		frappe.reload_doc('stock', 'doctype', doctype)
-	frappe.reload_doc('buying', 'doctype', 'purchase_receipt_item_supplied')
+	doctypes_to_reload = [
+			("stock", "repost_item_valuation"),
+			("stock", "stock_entry_detail"),
+			("stock", "purchase_receipt_item"),
+			("stock", "delivery_note_item"),
+			("stock", "packed_item"),
+			("accounts", "sales_invoice_item"),
+			("accounts", "purchase_invoice_item"),
+			("buying", "purchase_receipt_item_supplied")
+		]
+
+	for module, doctype in doctypes_to_reload:
+		frappe.reload_doc(module, 'doctype', doctype)
 
 	reposting_project_deployed_on = get_creation_time()
 	posting_date = getdate(reposting_project_deployed_on)
@@ -20,9 +30,11 @@ def execute():
 	frappe.clear_cache()
 	frappe.flags.warehouse_account_map = {}
 
+	company_list = []
+
 	data = frappe.db.sql('''
 		SELECT
-			name, item_code, warehouse, voucher_type, voucher_no, posting_date, posting_time
+			name, item_code, warehouse, voucher_type, voucher_no, posting_date, posting_time, company
 		FROM
 			`tabStock Ledger Entry`
 		WHERE
@@ -36,6 +48,9 @@ def execute():
 	total_sle = len(data)
 	i = 0
 	for d in data:
+		if d.company not in company_list:
+			company_list.append(d.company)
+
 		update_entries_after({
 			"item_code": d.item_code,
 			"warehouse": d.warehouse,
@@ -53,12 +68,14 @@ def execute():
 
 	print("Reposting General Ledger Entries...")
 
-	for row in frappe.get_all('Company', filters= {'enable_perpetual_inventory': 1}):
-		update_gl_entries_after(posting_date, posting_time, company=row.name)
+	if data:
+		for row in frappe.get_all('Company', filters= {'enable_perpetual_inventory': 1}):
+			if row.name in company_list:
+				update_gl_entries_after(posting_date, posting_time, company=row.name)
 
 	frappe.db.auto_commit_on_many_writes = 0
 
 def get_creation_time():
-        return "2020-01-01 00:00:00"
-	#return frappe.db.sql(''' SELECT create_time FROM
-	#	INFORMATION_SCHEMA.TABLES where TABLE_NAME = "tabRepost Item Valuation" ''', as_list=1)[0][0]
+        # return "2020-01-01 00:00:00"
+	return frappe.db.sql(''' SELECT create_time FROM
+		INFORMATION_SCHEMA.TABLES where TABLE_NAME = "tabRepost Item Valuation" ''', as_list=1)[0][0]

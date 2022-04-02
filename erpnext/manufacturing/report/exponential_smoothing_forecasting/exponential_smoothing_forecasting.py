@@ -1,12 +1,15 @@
 # Copyright (c) 2020, Frappe Technologies Pvt. Ltd. and contributors
 # For license information, please see license.txt
 
-from __future__ import unicode_literals
-import frappe, erpnext
+
+import frappe
 from frappe import _
-from frappe.utils import flt, nowdate, add_years, cint, getdate
+from frappe.utils import add_years, cint, flt, getdate
+
+import erpnext
 from erpnext.accounts.report.financial_statements import get_period_list
 from erpnext.stock.doctype.warehouse.warehouse import get_child_warehouses
+
 
 def execute(filters=None):
 	return ForecastingReport(filters).execute_report()
@@ -61,7 +64,7 @@ class ForecastingReport(ExponentialSmoothingForecast):
 
 		from_date = add_years(self.filters.from_date, cint(self.filters.no_of_years) * -1)
 		self.period_list = get_period_list(from_date, self.filters.to_date,
-			from_date, self.filters.to_date, None, self.filters.periodicity, ignore_fiscal_year=True)
+			from_date, self.filters.to_date, "Date Range", self.filters.periodicity, ignore_fiscal_year=True)
 
 		order_data = self.get_data_for_forecast() or []
 

@@ -1,16 +1,25 @@
-# -*- coding: utf-8 -*-
 # Copyright (c) 2015, Frappe Technologies Pvt. Ltd. and Contributors
 # See license.txt
-from __future__ import unicode_literals
+
+import unittest
 
 import frappe
-import unittest
 from frappe.utils import flt, nowdate
-from erpnext.selling.doctype.sales_order.test_sales_order import make_sales_order
-from erpnext.accounts.doctype.payment_entry.payment_entry import get_payment_entry, InvalidPaymentEntry
-from erpnext.accounts.doctype.sales_invoice.test_sales_invoice import create_sales_invoice, create_sales_invoice_against_cost_center
-from erpnext.accounts.doctype.purchase_invoice.test_purchase_invoice import make_purchase_invoice, make_purchase_invoice_against_cost_center
+
+from erpnext.accounts.doctype.payment_entry.payment_entry import (
+	InvalidPaymentEntry,
+	get_payment_entry,
+)
+from erpnext.accounts.doctype.purchase_invoice.test_purchase_invoice import (
+	make_purchase_invoice,
+	make_purchase_invoice_against_cost_center,
+)
+from erpnext.accounts.doctype.sales_invoice.test_sales_invoice import (
+	create_sales_invoice,
+	create_sales_invoice_against_cost_center,
+)
 from erpnext.hr.doctype.expense_claim.test_expense_claim import make_expense_claim
+from erpnext.selling.doctype.sales_order.test_sales_order import make_sales_order
 
 test_dependencies = ["Item"]
 
@@ -107,7 +116,7 @@ class TestPaymentEntry(unittest.TestCase):
 		pe = get_payment_entry("Sales Invoice", si.name, bank_account="_Test Bank USD - _TC")
 		pe.reference_no = "1"
 		pe.reference_date = "2016-01-01"
-		pe.target_exchange_rate = 50
+		pe.source_exchange_rate = 50
 		pe.insert()
 		pe.submit()
 
@@ -154,7 +163,7 @@ class TestPaymentEntry(unittest.TestCase):
 		pe = get_payment_entry("Sales Invoice", si.name, bank_account="_Test Bank USD - _TC")
 		pe.reference_no = "1"
 		pe.reference_date = "2016-01-01"
-		pe.target_exchange_rate = 50
+		pe.source_exchange_rate = 50
 		pe.insert()
 		pe.submit()
 
@@ -192,6 +201,34 @@ class TestPaymentEntry(unittest.TestCase):
 		self.assertEqual(pe.references[1].payment_term, 'Tax Receivable')
 		self.assertEqual(si.payment_schedule[0].paid_amount, 200.0)
 		self.assertEqual(si.payment_schedule[1].paid_amount, 36.0)
+
+	def test_payment_entry_against_payment_terms_with_discount(self):
+		si = create_sales_invoice(do_not_save=1, qty=1, rate=200)
+		create_payment_terms_template_with_discount()
+		si.payment_terms_template = 'Test Discount Template'
+
+		frappe.db.set_value('Company', si.company, 'default_discount_account', 'Write Off - _TC')
+
+		si.append('taxes', {
+			"charge_type": "On Net Total",
+			"account_head": "_Test Account Service Tax - _TC",
+			"cost_center": "_Test Cost Center - _TC",
+			"description": "Service Tax",
+			"rate": 18
+		})
+		si.save()
+
+		si.submit()
+
+		pe = get_payment_entry("Sales Invoice", si.name, bank_account="_Test Cash - _TC")
+		pe.submit()
+		si.load_from_db()
+
+		self.assertEqual(pe.references[0].payment_term, '30 Credit Days with 10% Discount')
+		self.assertEqual(si.payment_schedule[0].payment_amount, 236.0)
+		self.assertEqual(si.payment_schedule[0].paid_amount, 212.40)
+		self.assertEqual(si.payment_schedule[0].outstanding, 0)
+		self.assertEqual(si.payment_schedule[0].discounted_amount, 23.6)
 
 
 	def test_payment_against_purchase_invoice_to_check_status(self):
@@ -267,8 +304,39 @@ class TestPaymentEntry(unittest.TestCase):
 		outstanding_amount = flt(frappe.db.get_value("Sales Invoice", si.name, "outstanding_amount"))
 		self.assertEqual(outstanding_amount, 80)
 
+	def test_payment_entry_against_si_usd_to_usd_with_deduction_in_base_currency (self):
+		si = create_sales_invoice(customer="_Test Customer USD", debit_to="_Test Receivable USD - _TC",
+			currency="USD", conversion_rate=50, do_not_save=1)
+
+		si.plc_conversion_rate = 50
+		si.save()
+		si.submit()
+
+		pe = get_payment_entry("Sales Invoice", si.name, party_amount=20,
+			bank_account="_Test Bank USD - _TC", bank_amount=900)
+
+		pe.source_exchange_rate = 45.263
+		pe.target_exchange_rate = 45.263
+		pe.reference_no = "1"
+		pe.reference_date = "2016-01-01"
+
+
+		pe.append("deductions", {
+			"account": "_Test Exchange Gain/Loss - _TC",
+			"cost_center": "_Test Cost Center - _TC",
+			"amount": 94.80
+		})
+
+		pe.save()
+
+		self.assertEqual(flt(pe.difference_amount, 2), 0.0)
+		self.assertEqual(flt(pe.unallocated_amount, 2), 0.0)
+
 	def test_payment_entry_retrieves_last_exchange_rate(self):
-		from erpnext.setup.doctype.currency_exchange.test_currency_exchange import test_records, save_new_records
+		from erpnext.setup.doctype.currency_exchange.test_currency_exchange import (
+			save_new_records,
+			test_records,
+		)
 
 		save_new_records(test_records)
 
@@ -435,7 +503,7 @@ class TestPaymentEntry(unittest.TestCase):
 		pe = get_payment_entry("Sales Invoice", si.name, bank_account="_Test Bank USD - _TC")
 		pe.reference_no = "1"
 		pe.reference_date = "2016-01-01"
-		pe.target_exchange_rate = 55
+		pe.source_exchange_rate = 55
 
 		pe.append("deductions", {
 			"account": "_Test Exchange Gain/Loss - _TC",
@@ -561,9 +629,48 @@ class TestPaymentEntry(unittest.TestCase):
 		party_account_balance = get_balance_on(account=pe.paid_from, cost_center=pe.cost_center)
 
 		self.assertEqual(pe.cost_center, si.cost_center)
-		self.assertEqual(expected_account_balance, account_balance)
-		self.assertEqual(expected_party_balance, party_balance)
-		self.assertEqual(expected_party_account_balance, party_account_balance)
+		self.assertEqual(flt(expected_account_balance), account_balance)
+		self.assertEqual(flt(expected_party_balance), party_balance)
+		self.assertEqual(flt(expected_party_account_balance), party_account_balance)
+
+	def test_multi_currency_payment_entry_with_taxes(self):
+		payment_entry = create_payment_entry(party='_Test Supplier USD', paid_to = '_Test Payable USD - _TC',
+			save=True)
+		payment_entry.append('taxes', {
+			'account_head': '_Test Account Service Tax - _TC',
+			'charge_type': 'Actual',
+			'tax_amount': 10,
+			'add_deduct_tax': 'Add',
+			'description': 'Test'
+		})
+
+		payment_entry.save()
+		self.assertEqual(payment_entry.base_total_taxes_and_charges, 10)
+		self.assertEqual(flt(payment_entry.total_taxes_and_charges, 2), flt(10 / payment_entry.target_exchange_rate, 2))
+
+def create_payment_entry(**args):
+	payment_entry = frappe.new_doc('Payment Entry')
+	payment_entry.company = args.get('company') or '_Test Company'
+	payment_entry.payment_type = args.get('payment_type') or 'Pay'
+	payment_entry.party_type = args.get('party_type') or 'Supplier'
+	payment_entry.party = args.get('party') or '_Test Supplier'
+	payment_entry.paid_from = args.get('paid_from') or '_Test Bank - _TC'
+	payment_entry.paid_to = args.get('paid_to') or 'Creditors - _TC'
+	payment_entry.paid_amount = args.get('paid_amount') or 1000
+
+	payment_entry.setup_party_account_field()
+	payment_entry.set_missing_values()
+	payment_entry.set_exchange_rate()
+	payment_entry.received_amount = payment_entry.paid_amount / payment_entry.target_exchange_rate
+	payment_entry.reference_no = 'Test001'
+	payment_entry.reference_date = nowdate()
+
+	if args.get('save'):
+		payment_entry.save()
+		if args.get('submit'):
+			payment_entry.submit()
+
+	return payment_entry
 
 def create_payment_terms_template():
 
@@ -591,6 +698,26 @@ def create_payment_terms_template():
 			}]
 		}).insert()
 
+def create_payment_terms_template_with_discount():
+
+	create_payment_term('30 Credit Days with 10% Discount')
+
+	if not frappe.db.exists('Payment Terms Template', 'Test Discount Template'):
+		payment_term_template = frappe.get_doc({
+			'doctype': 'Payment Terms Template',
+			'template_name': 'Test Discount Template',
+			'allocate_payment_based_on_payment_terms': 1,
+			'terms': [{
+				'doctype': 'Payment Terms Template Detail',
+				'payment_term': '30 Credit Days with 10% Discount',
+				'invoice_portion': 100,
+				'credit_days_based_on': 'Day(s) after invoice date',
+				'credit_days': 2,
+				'discount': 10,
+				'discount_validity_based_on': 'Day(s) after invoice date',
+				'discount_validity': 1
+			}]
+		}).insert()
 
 def create_payment_term(name):
 	if not frappe.db.exists('Payment Term', name):

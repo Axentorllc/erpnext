@@ -1,15 +1,16 @@
-# -*- coding: utf-8 -*-
 # Copyright (c) 2017, Frappe Technologies Pvt. Ltd. and contributors
 # For license information, please see license.txt
 
-from __future__ import unicode_literals
+
 import frappe
 from frappe import _
-from frappe.model.document import Document
 from frappe.contacts.address_and_contact import load_address_and_contact
-from frappe.utils import cint
 from frappe.integrations.utils import get_payment_gateway_controller
+from frappe.model.document import Document
+from frappe.utils import cint, get_link_to_form
+
 from erpnext.non_profit.doctype.membership_type.membership_type import get_membership_type
+
 
 class Member(Document):
 	def onload(self):
@@ -26,9 +27,10 @@ class Member(Document):
 		validate_email_address(email.strip(), True)
 
 	def setup_subscription(self):
-		membership_settings = frappe.get_doc("Membership Settings")
-		if not membership_settings.enable_razorpay:
-			frappe.throw("Please enable Razorpay to setup subscription")
+		non_profit_settings = frappe.get_doc('Non Profit Settings')
+		if not non_profit_settings.enable_razorpay_for_memberships:
+			frappe.throw(_('Please check Enable Razorpay for Memberships in {0} to setup subscription')).format(
+				get_link_to_form('Non Profit Settings', 'Non Profit Settings'))
 
 		controller = get_payment_gateway_controller("Razorpay")
 		settings = controller.get_settings({})
@@ -40,7 +42,7 @@ class Member(Document):
 
 		subscription_details = {
 			"plan_id": plan_id,
-			"billing_frequency": cint(membership_settings.billing_frequency),
+			"billing_frequency": cint(non_profit_settings.billing_frequency),
 			"customer_notify": 1
 		}
 
@@ -52,6 +54,7 @@ class Member(Document):
 
 		return subscription
 
+	@frappe.whitelist()
 	def make_customer_and_link(self):
 		if self.customer:
 			frappe.msgprint(_("A customer is already linked to this Member"))
@@ -82,7 +85,9 @@ def create_member(user_details):
 		"email_id": user_details.email,
 		"pan_number": user_details.pan or None,
 		"membership_type": user_details.plan_id,
-		"subscription_id": user_details.subscription_id or None
+		"customer_id": user_details.customer_id or None,
+		"subscription_id": user_details.subscription_id or None,
+		"subscription_status": user_details.subscription_status or ""
 	})
 
 	member.insert(ignore_permissions=True)
@@ -95,10 +100,13 @@ def create_customer(user_details, member=None):
 	customer = frappe.new_doc("Customer")
 	customer.customer_name = user_details.fullname
 	customer.customer_type = "Individual"
+	customer.customer_group = frappe.db.get_single_value("Selling Settings", "customer_group")
+	customer.territory = frappe.db.get_single_value("Selling Settings", "territory")
 	customer.flags.ignore_mandatory = True
 	customer.insert(ignore_permissions=True)
 
 	try:
+		frappe.db.savepoint("contact_creation")
 		contact = frappe.new_doc("Contact")
 		contact.first_name = user_details.fullname
 		if user_details.mobile:
@@ -124,6 +132,7 @@ def create_customer(user_details, member=None):
 		return customer.name
 
 	except Exception as e:
+		frappe.db.rollback(save_point="contact_creation")
 		frappe.log_error(frappe.get_traceback(), _("Contact Creation Failed"))
 		pass
 

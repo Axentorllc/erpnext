@@ -1,23 +1,36 @@
 # Copyright (c) 2015, Frappe Technologies Pvt. Ltd. and Contributors
 # License: GNU General Public License v3. See license.txt
 
-from __future__ import unicode_literals
+
 import frappe
+from frappe import _
 from frappe.model.document import Document
 from frappe.model.mapper import get_mapped_doc
-from frappe import _
-from frappe.utils import flt, cint
-from erpnext.stock.doctype.quality_inspection_template.quality_inspection_template \
-	import get_template_details
+from frappe.utils import cint, flt
+
+from erpnext.stock.doctype.quality_inspection_template.quality_inspection_template import (
+	get_template_details,
+)
+
 
 class QualityInspection(Document):
 	def validate(self):
 		if not self.readings and self.item_code:
 			self.get_item_specification_details()
 
+		if self.inspection_type=="In Process" and self.reference_type=="Job Card":
+			item_qi_template = frappe.db.get_value("Item", self.item_code, 'quality_inspection_template')
+			parameters = get_template_details(item_qi_template)
+			for reading in self.readings:
+				for d in parameters:
+					if reading.specification == d.specification:
+						reading.update(d)
+						reading.status = "Accepted"
+
 		if self.readings:
 			self.inspect_and_set_status()
 
+	@frappe.whitelist()
 	def get_item_specification_details(self):
 		if not self.quality_inspection_template:
 			self.quality_inspection_template = frappe.db.get_value('Item',
@@ -32,6 +45,7 @@ class QualityInspection(Document):
 			child.update(d)
 			child.status = "Accepted"
 
+	@frappe.whitelist()
 	def get_quality_inspection_template(self):
 		template = ''
 		if self.bom_no:
@@ -62,17 +76,21 @@ class QualityInspection(Document):
 					(quality_inspection, self.modified, self.reference_name, self.item_code))
 
 		else:
+			args = [quality_inspection, self.modified, self.reference_name, self.item_code]
 			doctype = self.reference_type + ' Item'
+
 			if self.reference_type == 'Stock Entry':
 				doctype = 'Stock Entry Detail'
 
 			if self.reference_type and self.reference_name:
 				conditions = ""
 				if self.batch_no and self.docstatus == 1:
-					conditions += " and t1.batch_no = '%s'"%(self.batch_no)
+					conditions += " and t1.batch_no = %s"
+					args.append(self.batch_no)
 
 				if self.docstatus == 2: # if cancel, then remove qi link wherever same name
-					conditions += " and t1.quality_inspection = '%s'"%(self.name)
+					conditions += " and t1.quality_inspection = %s"
+					args.append(self.name)
 
 				frappe.db.sql("""
 					UPDATE
@@ -85,7 +103,7 @@ class QualityInspection(Document):
 						and t1.parent = t2.name
 						{conditions}
 				""".format(parent_doc=self.reference_type, child_doc=doctype, conditions=conditions),
-					(quality_inspection, self.modified, self.reference_name, self.item_code))
+					args)
 
 	def inspect_and_set_status(self):
 		for reading in self.readings:

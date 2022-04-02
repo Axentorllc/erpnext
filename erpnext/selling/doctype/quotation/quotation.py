@@ -1,11 +1,11 @@
 # Copyright (c) 2015, Frappe Technologies Pvt. Ltd. and Contributors
 # License: GNU General Public License v3. See license.txt
 
-from __future__ import unicode_literals
+
 import frappe
-from frappe.model.mapper import get_mapped_doc
-from frappe.utils import flt, nowdate, getdate
 from frappe import _
+from frappe.model.mapper import get_mapped_doc
+from frappe.utils import flt, getdate, nowdate
 
 from erpnext.controllers.selling_controller import SellingController
 
@@ -19,7 +19,7 @@ class Quotation(SellingController):
 			self.indicator_color = 'blue'
 			self.indicator_title = 'Submitted'
 		if self.valid_till and getdate(self.valid_till) < getdate(nowdate()):
-			self.indicator_color = 'darkgrey'
+			self.indicator_color = 'gray'
 			self.indicator_title = 'Expired'
 
 	def validate(self):
@@ -30,6 +30,9 @@ class Quotation(SellingController):
 		self.set_customer_name()
 		if self.items:
 			self.with_items = 1
+
+		from erpnext.stock.doctype.packed_item.packed_item import make_packing_list
+		make_packing_list(self)
 
 	def validate_valid_till(self):
 		if self.valid_till and getdate(self.valid_till) < getdate(self.transaction_date):
@@ -50,7 +53,7 @@ class Quotation(SellingController):
 			self.customer_name = company_name or lead_name
 
 	def update_opportunity(self, status):
-		for opportunity in list(set([d.prevdoc_docname for d in self.get("items")])):
+		for opportunity in set(d.prevdoc_docname for d in self.get("items")):
 			if opportunity:
 				self.update_opportunity_status(status, opportunity)
 
@@ -64,6 +67,7 @@ class Quotation(SellingController):
 		opp = frappe.get_doc("Opportunity", opportunity)
 		opp.set_status(status=status, update=True)
 
+	@frappe.whitelist()
 	def declare_enquiry_lost(self, lost_reasons_list, detailed_reason=None):
 		if not self.has_sales_order():
 			get_lost_reasons = frappe.get_list('Quotation Lost Reason',
@@ -147,7 +151,6 @@ def _make_sales_order(source_name, target_doc=None, ignore_permissions=False):
 		if source.referral_sales_partner:
 			target.sales_partner=source.referral_sales_partner
 			target.commission_rate=frappe.get_value('Sales Partner', source.referral_sales_partner, 'commission_rate')
-		target.ignore_pricing_rule = 1
 		target.flags.ignore_permissions = ignore_permissions
 		target.run_method("set_missing_values")
 		target.run_method("calculate_taxes_and_totals")
@@ -189,6 +192,7 @@ def _make_sales_order(source_name, target_doc=None, ignore_permissions=False):
 		}, target_doc, set_missing_values, ignore_permissions=ignore_permissions)
 
 	# postprocess: fetch shipping address, set missing values
+	doclist.set_onload('ignore_price_list', True)
 
 	return doclist
 
@@ -222,7 +226,7 @@ def _make_sales_invoice(source_name, target_doc=None, ignore_permissions=False):
 		if customer:
 			target.customer = customer.name
 			target.customer_name = customer.customer_name
-		target.ignore_pricing_rule = 1
+
 		target.flags.ignore_permissions = ignore_permissions
 		target.run_method("set_missing_values")
 		target.run_method("calculate_taxes_and_totals")
@@ -252,6 +256,8 @@ def _make_sales_invoice(source_name, target_doc=None, ignore_permissions=False):
 			}
 		}, target_doc, set_missing_values, ignore_permissions=ignore_permissions)
 
+	doclist.set_onload('ignore_price_list', True)
+
 	return doclist
 
 def _make_customer(source_name, ignore_permissions=False):
@@ -269,7 +275,7 @@ def _make_customer(source_name, ignore_permissions=False):
 				customer = frappe.get_doc(customer_doclist)
 				customer.flags.ignore_permissions = ignore_permissions
 				if quotation.get("party_name") == "Shopping Cart":
-					customer.customer_group = frappe.db.get_value("Shopping Cart Settings", None,
+					customer.customer_group = frappe.db.get_value("E Commerce Settings", None,
 						"default_customer_group")
 
 				try:

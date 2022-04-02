@@ -57,18 +57,22 @@ erpnext.financial_statements = {
 			});
 		});
 
-		report.page.add_inner_button(__("Balance Sheet"), function() {
+		const views_menu = report.page.add_custom_button_group(__('Financial Statements'));
+
+		report.page.add_custom_menu_item(views_menu, __("Balance Sheet"), function() {
 			var filters = report.get_values();
 			frappe.set_route('query-report', 'Balance Sheet', {company: filters.company});
-		}, __('Financial Statements'));
-		report.page.add_inner_button(__("Profit and Loss"), function() {
+		});
+
+		report.page.add_custom_menu_item(views_menu, __("Profit and Loss"), function() {
 			var filters = report.get_values();
 			frappe.set_route('query-report', 'Profit and Loss Statement', {company: filters.company});
-		}, __('Financial Statements'));
-		report.page.add_inner_button(__("Cash Flow Statement"), function() {
+		});
+
+		report.page.add_custom_menu_item(views_menu, __("Cash Flow Statement"), function() {
 			var filters = report.get_values();
 			frappe.set_route('query-report', 'Cash Flow', {company: filters.company});
-		}, __('Financial Statements'));
+		});
 	}
 };
 
@@ -109,15 +113,15 @@ function get_filters() {
 			"fieldname":"period_start_date",
 			"label": __("Start Date"),
 			"fieldtype": "Date",
-			"hidden": 1,
-			"reqd": 1
+			"reqd": 1,
+			"depends_on": "eval:doc.filter_based_on == 'Date Range'"
 		},
 		{
 			"fieldname":"period_end_date",
 			"label": __("End Date"),
 			"fieldtype": "Date",
-			"hidden": 1,
-			"reqd": 1
+			"reqd": 1,
+			"depends_on": "eval:doc.filter_based_on == 'Date Range'"
 		},
 		{
 			"fieldname":"from_fiscal_year",
@@ -125,7 +129,8 @@ function get_filters() {
 			"fieldtype": "Link",
 			"options": "Fiscal Year",
 			"default": frappe.defaults.get_user_default("fiscal_year"),
-			"reqd": 1
+			"reqd": 1,
+			"depends_on": "eval:doc.filter_based_on == 'Fiscal Year'"
 		},
 		{
 			"fieldname":"to_fiscal_year",
@@ -133,7 +138,8 @@ function get_filters() {
 			"fieldtype": "Link",
 			"options": "Fiscal Year",
 			"default": frappe.defaults.get_user_default("fiscal_year"),
-			"reqd": 1
+			"reqd": 1,
+			"depends_on": "eval:doc.filter_based_on == 'Fiscal Year'"
 		},
 		{
 			"fieldname": "periodicity",
@@ -172,5 +178,3 @@ function get_filters() {
 
 	return filters;
 }
-
-

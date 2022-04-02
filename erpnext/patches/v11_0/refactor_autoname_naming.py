@@ -1,7 +1,6 @@
 # Copyright (c) 2018, Frappe Technologies Pvt. Ltd. and Contributors
 # License: GNU General Public License v3. See license.txt
 
-from __future__ import print_function, unicode_literals
 
 import frappe
 from frappe.custom.doctype.property_setter.property_setter import make_property_setter
@@ -20,7 +19,7 @@ doctype_series_map = {
 	'Certified Consultant': 'NPO-CONS-.YYYY.-.#####',
 	'Chat Room': 'CHAT-ROOM-.#####',
 	'Compensatory Leave Request': 'HR-CMP-.YY.-.MM.-.#####',
-	'Custom Script': 'SYS-SCR-.#####',
+	'Client Script': 'SYS-SCR-.#####',
 	'Employee Benefit Application': 'HR-BEN-APP-.YY.-.MM.-.#####',
 	'Employee Benefit Application Detail': '',
 	'Employee Benefit Claim': 'HR-BEN-CLM-.YY.-.MM.-.#####',

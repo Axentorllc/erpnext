@@ -1,15 +1,14 @@
 
 {% if not jQuery.isEmptyObject(data) %}
-<h5 style="margin-top: 20px;"> {{ __("Allocated Leaves") }} </h5>
 <table class="table table-bordered small">
 	<thead>
 		<tr>
 			<th style="width: 16%">{{ __("Leave Type") }}</th>
-			<th style="width: 16%" class="text-right">{{ __("Total Allocated Leaves") }}</th>
-			<th style="width: 16%" class="text-right">{{ __("Expired Leaves") }}</th>
-			<th style="width: 16%" class="text-right">{{ __("Used Leaves") }}</th>
-			<th style="width: 16%" class="text-right">{{ __("Pending Leaves") }}</th>
-			<th style="width: 16%" class="text-right">{{ __("Available Leaves") }}</th>
+			<th style="width: 16%" class="text-right">{{ __("Total Allocated Leave(s)") }}</th>
+			<th style="width: 16%" class="text-right">{{ __("Expired Leave(s)") }}</th>
+			<th style="width: 16%" class="text-right">{{ __("Used Leave(s)") }}</th>
+			<th style="width: 16%" class="text-right">{{ __("Leave(s) Pending Approval") }}</th>
+			<th style="width: 16%" class="text-right">{{ __("Available Leave(s)") }}</th>
 		</tr>
 	</thead>
 	<tbody>
@@ -19,12 +18,12 @@
 				<td class="text-right"> {%= value["total_leaves"] %} </td>
 				<td class="text-right"> {%= value["expired_leaves"] %} </td>
 				<td class="text-right"> {%= value["leaves_taken"] %} </td>
-				<td class="text-right"> {%= value["pending_leaves"] %} </td>
+				<td class="text-right"> {%= value["leaves_pending_approval"] %} </td>
 				<td class="text-right"> {%= value["remaining_leaves"] %} </td>
 			</tr>
 		{% } %}
 	</tbody>
 </table>
 {% else %}
-<p style="margin-top: 30px;"> No Leaves have been allocated. </p>
+<p style="margin-top: 30px;"> No Leave has been allocated. </p>
 {% endif %}

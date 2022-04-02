@@ -1,7 +1,8 @@
-from __future__ import unicode_literals
-import erpnext.education.utils as utils
+
 import frappe
 from frappe import _
+
+import erpnext.education.utils as utils
 
 no_cache = 1
 
@@ -26,4 +27,4 @@ def get_program(program_name):
 
 def get_course_progress(courses, program):
 	progress = {course.name: utils.get_course_progress(course, program) for course in courses}
-	return progress
+	return progress or {}

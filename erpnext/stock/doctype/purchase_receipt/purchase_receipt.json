@@ -106,6 +106,8 @@
   "terms",
   "bill_no",
   "bill_date",
+  "accounting_details_section",
+  "provisional_expense_account",
   "more_info",
   "project",
   "status",
@@ -514,8 +516,7 @@
    "oldfieldname": "pr_raw_material_details",
    "oldfieldtype": "Table",
    "options": "Purchase Receipt Item Supplied",
-   "print_hide": 1,
-   "read_only": 1
+   "print_hide": 1
   },
   {
    "fieldname": "section_break0",
@@ -762,6 +763,7 @@
    "read_only": 1
   },
   {
+   "depends_on": "eval:!doc.disable_rounded_total",
    "fieldname": "base_rounding_adjustment",
    "fieldtype": "Currency",
    "label": "Rounding Adjustment (Company Currency)",
@@ -805,6 +807,7 @@
    "read_only": 1
   },
   {
+   "depends_on": "eval:!doc.disable_rounded_total",
    "fieldname": "rounding_adjustment",
    "fieldtype": "Currency",
    "label": "Rounding Adjustment",
@@ -1097,7 +1100,8 @@
   {
    "fieldname": "scan_barcode",
    "fieldtype": "Data",
-   "label": "Scan Barcode"
+   "label": "Scan Barcode",
+   "options": "Barcode"
   },
   {
    "fieldname": "billing_address",
@@ -1138,19 +1142,34 @@
    "fetch_from": "supplier.represents_company",
    "fieldname": "represents_company",
    "fieldtype": "Link",
+   "ignore_user_permissions": 1,
    "label": "Represents Company",
    "options": "Company",
    "read_only": 1
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "accounting_details_section",
+   "fieldtype": "Section Break",
+   "label": "Accounting Details"
+  },
+  {
+   "fieldname": "provisional_expense_account",
+   "fieldtype": "Link",
+   "hidden": 1,
+   "label": "Provisional Expense Account",
+   "options": "Account"
   }
  ],
  "icon": "fa fa-truck",
  "idx": 261,
  "is_submittable": 1,
  "links": [],
- "modified": "2020-12-26 20:49:39.106049",
+ "modified": "2022-03-10 11:40:52.690984",
  "modified_by": "Administrator",
  "module": "Stock",
  "name": "Purchase Receipt",
+ "naming_rule": "By \"Naming Series\" field",
  "owner": "Administrator",
  "permissions": [
   {
@@ -1211,6 +1230,7 @@
  "show_name_in_global_search": 1,
  "sort_field": "modified",
  "sort_order": "DESC",
+ "states": [],
  "timeline_field": "supplier",
  "title_field": "title",
  "track_changes": 1

@@ -24,6 +24,12 @@ frappe.ui.form.on("Opportunity", {
 			frm.trigger('set_contact_link');
 		}
 	},
+	contact_date: function(frm) {
+		if(frm.doc.contact_date < frappe.datetime.now_datetime()){
+			frm.set_value("contact_date", "");
+			frappe.throw(__("Next follow up date should be greater than now."))
+		}
+	},
 
 	onload_post_render: function(frm) {
 		frm.get_field("items").grid.set_multiple_add("item_code", "qty");
@@ -45,6 +51,13 @@ frappe.ui.form.on("Opportunity", {
 
 	onload_post_render: function(frm) {
 		frm.get_field("items").grid.set_multiple_add("item_code", "qty");
+	},
+
+	status:function(frm){
+		if (frm.doc.status == "Lost"){
+			frm.trigger('set_as_lost_dialog');
+		}
+
 	},
 
 	customer_address: function(frm, cdt, cdn) {
@@ -82,14 +95,17 @@ frappe.ui.form.on("Opportunity", {
 					}, __('Create'));
 			}
 
-			frm.add_custom_button(__('Quotation'),
-				cur_frm.cscript.create_quotation, __('Create'));
-
-			if(doc.status!=="Quotation") {
-				frm.add_custom_button(__('Lost'), () => {
-					frm.trigger('set_as_lost_dialog');
-				});
+			if (frm.doc.opportunity_from != "Customer") {
+				frm.add_custom_button(__('Customer'),
+					function() {
+						frm.trigger("make_customer")
+					}, __('Create'));
 			}
+
+			frm.add_custom_button(__('Quotation'),
+				function() {
+					frm.trigger("create_quotation")
+				}, __('Create'));
 		}
 
 		if(!frm.doc.__islocal && frm.perm[0].write && frm.doc.docstatus==0) {
@@ -184,6 +200,13 @@ erpnext.crm.Opportunity = frappe.ui.form.Controller.extend({
 	create_quotation: function() {
 		frappe.model.open_mapped_doc({
 			method: "erpnext.crm.doctype.opportunity.opportunity.make_quotation",
+			frm: cur_frm
+		})
+	},
+
+	make_customer: function() {
+		frappe.model.open_mapped_doc({
+			method: "erpnext.crm.doctype.opportunity.opportunity.make_customer",
 			frm: cur_frm
 		})
 	}

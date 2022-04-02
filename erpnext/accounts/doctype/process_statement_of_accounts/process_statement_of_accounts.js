@@ -19,7 +19,7 @@ frappe.ui.form.on('Process Statement Of Accounts', {
 							frappe.show_alert({message: __('Emails Queued'), indicator: 'blue'});
 						}
 						else{
-							frappe.msgprint('No Records for these settings.')
+							frappe.msgprint(__('No Records for these settings.'))
 						}
 					}
 				});
@@ -33,7 +33,7 @@ frappe.ui.form.on('Process Statement Of Accounts', {
 					type: 'GET',
 					success: function(result) {
 						if(jQuery.isEmptyObject(result)){
-							frappe.msgprint('No Records for these settings.');
+							frappe.msgprint(__('No Records for these settings.'));
 						}
 						else{
 							window.location = url;
@@ -50,6 +50,13 @@ frappe.ui.form.on('Process Statement Of Accounts', {
 					'enabled': 1
 				}
 			}
+		});
+		frm.set_query("account", function() {
+			return {
+				filters: {
+					'company': frm.doc.company
+				}
+			};
 		});
 		if(frm.doc.__islocal){
 			frm.set_value('from_date', frappe.datetime.add_months(frappe.datetime.get_today(), -1));
@@ -92,7 +99,7 @@ frappe.ui.form.on('Process Statement Of Accounts', {
 							frm.refresh_field('customers');
 						}
 						else{
-							frappe.throw('No Customers found with selected options.');
+							frappe.throw(__('No Customers found with selected options.'));
 						}
 					}
 				}

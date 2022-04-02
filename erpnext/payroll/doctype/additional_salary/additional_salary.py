@@ -1,31 +1,33 @@
-# -*- coding: utf-8 -*-
 # Copyright (c) 2018, Frappe Technologies Pvt. Ltd. and contributors
 # For license information, please see license.txt
 
-from __future__ import unicode_literals
+
 import frappe
-from frappe.model.document import Document
 from frappe import _, bold
-from frappe.utils import getdate, date_diff, comma_and, formatdate
+from frappe.model.document import Document
+from frappe.utils import comma_and, date_diff, formatdate, getdate
+
+from erpnext.hr.utils import validate_active_employee
+
 
 class AdditionalSalary(Document):
-
 	def on_submit(self):
-		if self.ref_doctype == "Employee Advance" and self.ref_docname:
-			frappe.db.set_value("Employee Advance", self.ref_docname, "return_amount", self.amount)
+		self.update_return_amount_in_employee_advance()
+		self.update_employee_referral()
 
-	def before_insert(self):
-		if frappe.db.exists("Additional Salary", {"employee": self.employee, "salary_component": self.salary_component,
-			"amount": self.amount, "payroll_date": self.payroll_date, "company": self.company, "docstatus": 1}):
-
-			frappe.throw(_("Additional Salary Component Exists."))
+	def on_cancel(self):
+		self.update_return_amount_in_employee_advance()
+		self.update_employee_referral(cancel=True)
 
 	def validate(self):
+		validate_active_employee(self.employee)
 		self.validate_dates()
 		self.validate_salary_structure()
 		self.validate_recurring_additional_salary_overlap()
+		self.validate_employee_referral()
+
 		if self.amount < 0:
-			frappe.throw(_("Amount should not be less than zero."))
+			frappe.throw(_("Amount should not be less than zero"))
 
 	def validate_salary_structure(self):
 		if not frappe.db.exists('Salary Structure Assignment', {'employee': self.employee}):
@@ -77,6 +79,38 @@ class AdditionalSalary(Document):
 			if self.payroll_date and getdate(self.payroll_date) > getdate(relieving_date):
 				frappe.throw(_("Payroll date can not be greater than employee's relieving date."))
 
+	def validate_employee_referral(self):
+		if self.ref_doctype == "Employee Referral":
+			referral_details = frappe.db.get_value("Employee Referral", self.ref_docname,
+				["is_applicable_for_referral_bonus", "status"], as_dict=1)
+
+			if not referral_details.is_applicable_for_referral_bonus:
+				frappe.throw(_("Employee Referral {0} is not applicable for referral bonus.").format(
+					self.ref_docname))
+
+			if self.type == "Deduction":
+				frappe.throw(_("Earning Salary Component is required for Employee Referral Bonus."))
+
+			if referral_details.status != "Accepted":
+				frappe.throw(_("Additional Salary for referral bonus can only be created against Employee Referral with status {0}").format(
+					frappe.bold("Accepted")))
+
+	def update_return_amount_in_employee_advance(self):
+		if self.ref_doctype == "Employee Advance" and self.ref_docname:
+			return_amount = frappe.db.get_value("Employee Advance", self.ref_docname, "return_amount")
+
+			if self.docstatus == 2:
+				return_amount -= self.amount
+			else:
+				return_amount += self.amount
+
+			frappe.db.set_value("Employee Advance", self.ref_docname, "return_amount", return_amount)
+
+	def update_employee_referral(self, cancel=False):
+		if self.ref_doctype == "Employee Referral":
+			status = "Unpaid" if cancel else "Paid"
+			frappe.db.set_value("Employee Referral", self.ref_docname, "referral_payment_status", status)
+
 	def get_amount(self, sal_start_date, sal_end_date):
 		start_date = getdate(sal_start_date)
 		end_date = getdate(sal_end_date)
@@ -90,58 +124,39 @@ class AdditionalSalary(Document):
 		return amount_per_day * no_of_days
 
 @frappe.whitelist()
-def get_additional_salary_component(employee, start_date, end_date, component_type):
-	additional_salaries = frappe.db.sql("""
-		select name, salary_component, type, amount, overwrite_salary_structure_amount, deduct_full_tax_on_selected_payroll_date
-		from `tabAdditional Salary`
-		where employee=%(employee)s
-			and docstatus = 1
-			and (
-					payroll_date between %(from_date)s and %(to_date)s
-				or
-					from_date <= %(to_date)s and to_date >= %(to_date)s
-				)
-		and type = %(component_type)s
-		order by salary_component, overwrite_salary_structure_amount DESC
-	""", {
-		'employee': employee,
-		'from_date': start_date,
-		'to_date': end_date,
-		'component_type': "Earning" if component_type == "earnings" else "Deduction"
-	}, as_dict=1)
+def get_additional_salaries(employee, start_date, end_date, component_type):
+	comp_type = 'Earning' if component_type == 'earnings' else 'Deduction'
 
-	existing_salary_components= []
-	salary_components_details = {}
-	additional_salary_details = []
+	additional_sal = frappe.qb.DocType('Additional Salary')
+	component_field = additional_sal.salary_component.as_('component')
+	overwrite_field = additional_sal.overwrite_salary_structure_amount.as_('overwrite')
 
-	overwrites_components = [ele.salary_component for ele in additional_salaries if ele.overwrite_salary_structure_amount == 1]
+	additional_salary_list = frappe.qb.from_(
+		additional_sal
+	).select(
+		additional_sal.name, component_field, additional_sal.type,
+		additional_sal.amount, additional_sal.is_recurring, overwrite_field,
+		additional_sal.deduct_full_tax_on_selected_payroll_date
+	).where(
+		(additional_sal.employee == employee)
+		& (additional_sal.docstatus == 1)
+		& (additional_sal.type == comp_type)
+	).where(
+		additional_sal.payroll_date[start_date: end_date]
+		| ((additional_sal.from_date <= end_date) & (additional_sal.to_date >= end_date))
+	).run(as_dict=True)
 
-	component_fields = ["depends_on_payment_days", "salary_component_abbr", "is_tax_applicable", "variable_based_on_taxable_salary", 'type']
-	for d in additional_salaries:
+	additional_salaries = []
+	components_to_overwrite = []
 
-		if d.salary_component not in existing_salary_components:
-			component = frappe.get_all("Salary Component", filters={'name': d.salary_component}, fields=component_fields)
-			struct_row = frappe._dict({'salary_component': d.salary_component})
-			if component:
-				struct_row.update(component[0])
+	for d in additional_salary_list:
+		if d.overwrite:
+			if d.component in components_to_overwrite:
+				frappe.throw(_("Multiple Additional Salaries with overwrite property exist for Salary Component {0} between {1} and {2}.").format(
+					frappe.bold(d.component), start_date, end_date), title=_("Error"))
 
-			struct_row['deduct_full_tax_on_selected_payroll_date'] = d.deduct_full_tax_on_selected_payroll_date
-			struct_row['is_additional_component'] = 1
+			components_to_overwrite.append(d.component)
 
-			salary_components_details[d.salary_component] = struct_row
+		additional_salaries.append(d)
 
-
-		if overwrites_components.count(d.salary_component) > 1:
-			frappe.throw(_("Multiple Additional Salaries with overwrite property exist for Salary Component: {0} between {1} and {2}.".format(d.salary_component, start_date, end_date)), title=_("Error"))
-		else:
-			additional_salary_details.append({
-				'name': d.name,
-				'component': d.salary_component,
-				'amount': d.amount,
-				'type': d.type,
-				'overwrite': d.overwrite_salary_structure_amount,
-			})
-
-		existing_salary_components.append(d.salary_component)
-
-	return salary_components_details, additional_salary_details
+	return additional_salaries

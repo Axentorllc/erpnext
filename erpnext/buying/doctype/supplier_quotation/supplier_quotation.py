@@ -1,14 +1,14 @@
 # Copyright (c) 2015, Frappe Technologies Pvt. Ltd. and Contributors
 # License: GNU General Public License v3. See license.txt
 
-from __future__ import unicode_literals
+
 import frappe
 from frappe import _
-from frappe.utils import flt, nowdate, add_days, getdate
 from frappe.model.mapper import get_mapped_doc
+from frappe.utils import flt, getdate, nowdate
 
-from erpnext.controllers.buying_controller import BuyingController
 from erpnext.buying.utils import validate_for_items
+from erpnext.controllers.buying_controller import BuyingController
 
 form_grid_templates = {
 	"items": "templates/form_grid/item_grid.html"
@@ -71,7 +71,7 @@ class SupplierQuotation(BuyingController):
 			doc_sup = doc_sup[0] if doc_sup else None
 			if not doc_sup:
 				frappe.throw(_("Supplier {0} not found in {1}").format(self.supplier,
-					"<a href='desk#Form/Request for Quotation/{0}'> Request for Quotation {0} </a>".format(doc.name)))
+					"<a href='desk/app/Form/Request for Quotation/{0}'> Request for Quotation {0} </a>".format(doc.name)))
 
 			quote_status = _('Received')
 			for item in doc.items:
@@ -109,7 +109,6 @@ def get_list_context(context=None):
 @frappe.whitelist()
 def make_purchase_order(source_name, target_doc=None):
 	def set_missing_values(source, target):
-		target.ignore_pricing_rule = 1
 		target.run_method("set_missing_values")
 		target.run_method("get_schedule_dates")
 		target.run_method("calculate_taxes_and_totals")
@@ -140,6 +139,7 @@ def make_purchase_order(source_name, target_doc=None):
 		},
 	}, target_doc, set_missing_values)
 
+	doclist.set_onload('ignore_price_list', True)
 	return doclist
 
 @frappe.whitelist()

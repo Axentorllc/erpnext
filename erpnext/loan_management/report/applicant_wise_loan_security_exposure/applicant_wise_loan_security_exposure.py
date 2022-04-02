@@ -1,12 +1,14 @@
 # Copyright (c) 2013, Frappe Technologies Pvt. Ltd. and contributors
 # For license information, please see license.txt
 
-from __future__ import unicode_literals
+
 import frappe
-import erpnext
 from frappe import _
-from frappe.utils import get_datetime, flt
+from frappe.utils import flt
 from six import iteritems
+
+import erpnext
+
 
 def execute(filters=None):
 	columns = get_columns(filters)
@@ -36,7 +38,7 @@ def get_columns(filters):
 
 def get_data(filters):
 	data = []
-	loan_security_details = get_loan_security_details(filters)
+	loan_security_details = get_loan_security_details()
 	pledge_values, total_value_map, applicant_type_map = get_applicant_wise_total_loan_security_qty(filters,
 		loan_security_details)
 
@@ -64,7 +66,7 @@ def get_data(filters):
 
 	return data
 
-def get_loan_security_details(filters):
+def get_loan_security_details():
 	security_detail_map = {}
 	loan_security_price_map = {}
 	lsp_validity_map = {}

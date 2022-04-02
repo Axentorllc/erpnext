@@ -1,8 +1,8 @@
 {
+ "actions": [],
  "allow_import": 1,
  "allow_rename": 1,
- "autoname": "field:title",
- "creation": "2018-11-22 22:45:00.370913",
+ "creation": "2022-01-19 01:09:13.297137",
  "doctype": "DocType",
  "document_type": "Setup",
  "editable_grid": 1,
@@ -10,6 +10,9 @@
  "field_order": [
   "title",
   "company",
+  "column_break_3",
+  "disabled",
+  "section_break_5",
   "taxes"
  ],
  "fields": [
@@ -20,8 +23,7 @@
    "in_list_view": 1,
    "label": "Title",
    "no_copy": 1,
-   "reqd": 1,
-   "unique": 1
+   "reqd": 1
   },
   {
    "fieldname": "taxes",
@@ -33,12 +35,28 @@
   {
    "fieldname": "company",
    "fieldtype": "Link",
+   "in_list_view": 1,
    "label": "Company",
    "options": "Company",
    "reqd": 1
+  },
+  {
+   "fieldname": "column_break_3",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "0",
+   "fieldname": "disabled",
+   "fieldtype": "Check",
+   "label": "Disabled"
+  },
+  {
+   "fieldname": "section_break_5",
+   "fieldtype": "Section Break"
   }
  ],
- "modified": "2020-09-18 17:26:09.703215",
+ "links": [],
+ "modified": "2022-01-18 21:11:23.105589",
  "modified_by": "Administrator",
  "module": "Accounts",
  "name": "Item Tax Template",
@@ -81,5 +99,7 @@
  "show_name_in_global_search": 1,
  "sort_field": "modified",
  "sort_order": "DESC",
+ "states": [],
+ "title_field": "title",
  "track_changes": 1
 }

@@ -1,17 +1,15 @@
-# -*- coding: utf-8 -*-
 # Copyright (c) 2017, Frappe Technologies Pvt. Ltd. and Contributors
 # See license.txt
-from __future__ import unicode_literals
+
 
 import frappe
-import unittest
+from frappe.tests.utils import FrappeTestCase
 
-class TestSupplierScorecard(unittest.TestCase):
+
+class TestSupplierScorecard(FrappeTestCase):
 
 	def test_create_scorecard(self):
-		delete_test_scorecards()
-		my_doc = make_supplier_scorecard()
-		doc = my_doc.insert()
+		doc = make_supplier_scorecard().insert()
 		self.assertEqual(doc.name, valid_scorecard[0].get("supplier"))
 
 	def test_criteria_weight(self):
@@ -51,7 +49,7 @@ valid_scorecard = [
 				"min_grade":0.0,"name":"Very Poor",
 				"prevent_rfqs":1,
 				"notify_supplier":0,
-				"doctype":"Supplier Scorecard Standing",
+				"doctype":"Supplier Scorecard Scoring Standing",
 				"max_grade":30.0,
 				"prevent_pos":1,
 				"warn_pos":0,
@@ -67,7 +65,7 @@ valid_scorecard = [
 				"name":"Poor",
 				"prevent_rfqs":1,
 				"notify_supplier":0,
-				"doctype":"Supplier Scorecard Standing",
+				"doctype":"Supplier Scorecard Scoring Standing",
 				"max_grade":50.0,
 				"prevent_pos":0,
 				"warn_pos":0,
@@ -83,7 +81,7 @@ valid_scorecard = [
 				"name":"Average",
 				"prevent_rfqs":0,
 				"notify_supplier":0,
-				"doctype":"Supplier Scorecard Standing",
+				"doctype":"Supplier Scorecard Scoring Standing",
 				"max_grade":80.0,
 				"prevent_pos":0,
 				"warn_pos":0,
@@ -99,7 +97,7 @@ valid_scorecard = [
 				"name":"Excellent",
 				"prevent_rfqs":0,
 				"notify_supplier":0,
-				"doctype":"Supplier Scorecard Standing",
+				"doctype":"Supplier Scorecard Scoring Standing",
 				"max_grade":100.0,
 				"prevent_pos":0,
 				"warn_pos":0,
@@ -121,7 +119,8 @@ valid_scorecard = [
 			{
 				"weight":100.0,
 				"doctype":"Supplier Scorecard Scoring Criteria",
-				"criteria_name":"Delivery"
+				"criteria_name":"Delivery",
+				"formula": "100"
 			}
 		],
 		"supplier":"_Test Supplier",
@@ -129,4 +128,3 @@ valid_scorecard = [
 		"weighting_function":"{total_score} * max( 0, min ( 1 , (12 - {period_number}) / 12) )"
 	}
 ]
-

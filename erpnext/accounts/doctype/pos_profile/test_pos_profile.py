@@ -1,12 +1,12 @@
-# -*- coding: utf-8 -*-
 # Copyright (c) 2015, Frappe Technologies Pvt. Ltd. and Contributors and Contributors
 # See license.txt
-from __future__ import unicode_literals
+
+import unittest
 
 import frappe
-import unittest
-from erpnext.stock.get_item_details import get_pos_profile
+
 from erpnext.accounts.doctype.pos_profile.pos_profile import get_child_nodes
+from erpnext.stock.get_item_details import get_pos_profile
 
 test_dependencies = ['Item']
 
@@ -31,7 +31,9 @@ class TestPOSProfile(unittest.TestCase):
 
 		frappe.db.sql("delete from `tabPOS Profile`")
 
-def get_customers_list(pos_profile={}):
+def get_customers_list(pos_profile=None):
+	if pos_profile is None:
+		pos_profile = {}
 	cond = "1=1"
 	customer_groups = []
 	if pos_profile.get('customer_groups'):
@@ -92,11 +94,21 @@ def make_pos_profile(**args):
 		"write_off_cost_center":  args.write_off_cost_center or "_Test Write Off Cost Center - _TC"
 	})
 
-	payments = [{
+	mode_of_payment = frappe.get_doc("Mode of Payment", "Cash")
+	company = args.company or "_Test Company"
+	default_account = args.income_account or "Sales - _TC"
+
+	if not frappe.db.get_value("Mode of Payment Account", {"company": company, "parent": "Cash"}):
+		mode_of_payment.append("accounts", {
+			"company": company,
+			"default_account": default_account
+		})
+		mode_of_payment.save()
+
+	pos_profile.append("payments", {
 		'mode_of_payment': 'Cash',
 		'default': 1
-	}]
-	pos_profile.set("payments", payments)
+	})
 
 	if not frappe.db.exists("POS Profile", args.name or "_Test POS Profile"):
 		pos_profile.insert()

@@ -1,9 +1,10 @@
 # Copyright (c) 2013, Frappe Technologies Pvt. Ltd. and contributors
 # For license information, please see license.txt
 
-from __future__ import unicode_literals
+
 import frappe
 from frappe import _
+
 
 def execute(filters=None):
 
@@ -31,7 +32,7 @@ def get_columns():
 			"fieldtype": "Link",
 			"fieldname": "job_opening",
 			"options": "Job Opening",
-			"width": 100
+			"width": 105
 		},
 		{
 			"label": _("Job Applicant"),
@@ -44,13 +45,13 @@ def get_columns():
 			"label": _("Applicant name"),
 			"fieldtype": "data",
 			"fieldname": "applicant_name",
-			"width": 120
+			"width": 130
 		},
 		{
 			"label": _("Application Status"),
 			"fieldtype": "Data",
 			"fieldname": "application_status",
-			"width": 100
+			"width": 150
 		},
 		{
 			"label": _("Job Offer"),

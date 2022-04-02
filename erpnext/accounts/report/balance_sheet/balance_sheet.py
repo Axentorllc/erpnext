@@ -1,11 +1,18 @@
 # Copyright (c) 2015, Frappe Technologies Pvt. Ltd. and Contributors
 # License: GNU General Public License v3. See license.txt
 
-from __future__ import unicode_literals
+
 import frappe
 from frappe import _
-from frappe.utils import flt, cint
-from erpnext.accounts.report.financial_statements import (get_period_list, get_columns, get_data)
+from frappe.utils import cint, flt
+
+from erpnext.accounts.report.financial_statements import (
+	get_columns,
+	get_data,
+	get_filtered_list_for_consolidated_report,
+	get_period_list,
+)
+
 
 def execute(filters=None):
 	period_list = get_period_list(filters.from_fiscal_year, filters.to_fiscal_year,
@@ -113,11 +120,11 @@ def check_opening_balance(asset, liability, equity):
 	opening_balance = 0
 	float_precision = cint(frappe.db.get_default("float_precision")) or 2
 	if asset:
-		opening_balance = flt(asset[0].get("opening_balance", 0), float_precision)
+		opening_balance = flt(asset[-1].get("opening_balance", 0), float_precision)
 	if liability:
-		opening_balance -= flt(liability[0].get("opening_balance", 0), float_precision)
+		opening_balance -= flt(liability[-1].get("opening_balance", 0), float_precision)
 	if equity:
-		opening_balance -= flt(equity[0].get("opening_balance", 0), float_precision)
+		opening_balance -= flt(equity[-1].get("opening_balance", 0), float_precision)
 
 	opening_balance = flt(opening_balance, float_precision)
 	if opening_balance:
@@ -131,6 +138,10 @@ def get_report_summary(period_list, asset, liability, equity, provisional_profit
 
 	if filters.get('accumulated_values'):
 		period_list = [period_list[-1]]
+
+	# from consolidated financial statement
+	if filters.get('accumulated_in_group_company'):
+		period_list = get_filtered_list_for_consolidated_report(filters, period_list)
 
 	for period in period_list:
 		key = period if consolidated else period.key
@@ -147,7 +158,6 @@ def get_report_summary(period_list, asset, liability, equity, provisional_profit
 		{
 			"value": net_asset,
 			"label": "Total Asset",
-			"indicator": "Green",
 			"datatype": "Currency",
 			"currency": currency
 		},
@@ -155,14 +165,12 @@ def get_report_summary(period_list, asset, liability, equity, provisional_profit
 			"value": net_liability,
 			"label": "Total Liability",
 			"datatype": "Currency",
-			"indicator": "Red",
 			"currency": currency
 		},
 		{
 			"value": net_equity,
 			"label": "Total Equity",
 			"datatype": "Currency",
-			"indicator": "Blue",
 			"currency": currency
 		},
 		{

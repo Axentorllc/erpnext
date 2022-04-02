@@ -1,13 +1,11 @@
-# -*- coding: utf-8 -*-
 # Copyright (c) 2018, Frappe Technologies Pvt. Ltd. and contributors
 # For license information, please see license.txt
 
+import frappe
 import plaid
 import requests
-from plaid.errors import APIError, ItemError, InvalidRequestError
-
-import frappe
 from frappe import _
+from plaid.errors import APIError, InvalidRequestError, ItemError
 
 
 class PlaidConnector():
@@ -20,7 +18,7 @@ class PlaidConnector():
 			client_id=self.settings.plaid_client_id,
 			secret=self.settings.get_password("plaid_secret"),
 			environment=self.settings.plaid_env,
-			api_version="2019-05-29"
+			api_version="2020-09-14"
 		)
 
 	def get_access_token(self, public_token):
@@ -29,7 +27,7 @@ class PlaidConnector():
 		response = self.client.Item.public_token.exchange(public_token)
 		access_token = response["access_token"]
 		return access_token
-	
+
 	def get_token_request(self, update_mode=False):
 		country_codes = ["US", "CA", "FR", "IE", "NL", "ES", "GB"] if self.settings.enable_european_access else ["US", "CA"]
 		args = {
@@ -50,7 +48,7 @@ class PlaidConnector():
 				"secret": self.settings.plaid_secret,
 				"products": self.products,
 			})
-		
+
 		return args
 
 	def get_link_token(self, update_mode=False):
@@ -99,5 +97,7 @@ class PlaidConnector():
 				response = self.client.Transactions.get(self.access_token, start_date=start_date, end_date=end_date, offset=len(transactions))
 				transactions.extend(response["transactions"])
 			return transactions
+		except ItemError as e:
+			raise e
 		except Exception:
 			frappe.log_error(frappe.get_traceback(), _("Plaid transactions sync error"))

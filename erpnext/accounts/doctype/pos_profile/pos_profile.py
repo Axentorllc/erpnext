@@ -1,12 +1,13 @@
 # Copyright (c) 2015, Frappe Technologies Pvt. Ltd. and Contributors
 # License: GNU General Public License v3. See license.txt
 
-from __future__ import unicode_literals
+
 import frappe
-from frappe import msgprint, _
-from frappe.utils import cint, now, get_link_to_form
-from six import iteritems
+from frappe import _, msgprint
 from frappe.model.document import Document
+from frappe.utils import get_link_to_form, now
+from six import iteritems
+
 
 class POSProfile(Document):
 	def validate(self):
@@ -62,14 +63,15 @@ class POSProfile(Document):
 
 		if len(default_mode) > 1:
 			frappe.throw(_("You can only select one mode of payment as default"))
-		
+
 		invalid_modes = []
 		for d in self.payments:
 			account = frappe.db.get_value(
-				"Mode of Payment Account", 
+				"Mode of Payment Account",
 				{"parent": d.mode_of_payment, "company": self.company},
 				"default_account"
 			)
+
 			if not account:
 				invalid_modes.append(get_link_to_form("Mode of Payment", d.mode_of_payment))
 

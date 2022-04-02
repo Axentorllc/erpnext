@@ -11,14 +11,13 @@ frappe.ui.form.on('Routing', {
 	},
 
 	display_sequence_id_column: function(frm) {
-		frappe.meta.get_docfield("BOM Operation", "sequence_id",
-			frm.doc.name).in_list_view = true;
-
-		frm.fields_dict.operations.grid.refresh();
+		frm.fields_dict.operations.grid.update_docfield_property(
+			'sequence_id', 	'in_list_view', 1
+		);
 	},
 
 	calculate_operating_cost: function(frm, child) {
-		const operating_cost = flt(flt(child.hour_rate) * flt(child.time_in_mins) / 60, 2);
+		const operating_cost = flt(flt(child.hour_rate) * flt(child.time_in_mins) / 60, precision("operating_cost", child));
 		frappe.model.set_value(child.doctype, child.name, "operating_cost", operating_cost);
 	}
 });

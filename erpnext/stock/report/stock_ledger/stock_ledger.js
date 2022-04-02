@@ -82,19 +82,14 @@ frappe.query_reports["Stock Ledger"] = {
 			"label": __("Include UOM"),
 			"fieldtype": "Link",
 			"options": "UOM"
-		},
-		{
-			"fieldname": "show_cancelled_entries",
-			"label": __("Show Cancelled Entries"),
-			"fieldtype": "Check"
 		}
 	],
 	"formatter": function (value, row, column, data, default_formatter) {
 		value = default_formatter(value, row, column, data);
-		if (column.fieldname == "out_qty" && data.out_qty < 0) {
+		if (column.fieldname == "out_qty" && data && data.out_qty < 0) {
 			value = "<span style='color:red'>" + value + "</span>";
 		}
-		else if (column.fieldname == "in_qty" && data.in_qty > 0) {
+		else if (column.fieldname == "in_qty" && data && data.in_qty > 0) {
 			value = "<span style='color:green'>" + value + "</span>";
 		}
 
